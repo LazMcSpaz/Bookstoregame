@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3a2d63"/><stop offset="1" stop-color="#5b4580"/></linearGradient></defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <!-- awning -->
+  <g stroke="#261f3d" stroke-width="10" stroke-linejoin="round">
+    <path d="M40 78 H472 V150 Q445 178 418 150 Q391 178 364 150 Q337 178 310 150 Q283 178 256 150 Q229 178 202 150 Q175 178 148 150 Q121 178 94 150 Q67 178 40 150 Z" fill="#fff5e4"/>
+    <path d="M94 78 V150 Q121 178 148 150 V78 Z M202 78 V150 Q229 178 256 150 V78 Z M310 78 V150 Q337 178 364 150 V78 Z M418 78 V150 Q445 178 472 150 V78 Z" fill="#ec7a68"/>
+  </g>
+  <!-- floor shelf line -->
+  <rect x="40" y="420" width="432" height="22" rx="8" fill="#a8693f" stroke="#261f3d" stroke-width="10"/>
+  <!-- books -->
+  <g stroke="#261f3d" stroke-width="10" stroke-linejoin="round">
+    <rect x="70" y="250" width="52" height="170" rx="8" fill="#4fa3a5"/>
+    <rect x="122" y="220" width="46" height="200" rx="8" fill="#f4b942"/>
+    <rect x="168" y="268" width="56" height="152" rx="8" fill="#ec7a68"/>
+    <rect x="232" y="236" width="44" height="184" rx="8" fill="#9fb79a" transform="rotate(10 254 420)"/>
+  </g>
+  <g fill="#fff5e4"><rect x="83" y="280" width="26" height="10" rx="4"/><rect x="133" y="252" width="24" height="10" rx="4"/><rect x="183" y="298" width="26" height="10" rx="4"/></g>
+  <!-- cup -->
+  <g stroke="#261f3d" stroke-width="10" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M300 300 H420 V350 Q420 418 360 418 Q300 418 300 350 Z" fill="#fff5e4"/>
+    <path d="M420 318 H436 Q462 318 462 344 Q462 370 436 370 H418" fill="none"/>
+    <path d="M336 274 Q324 258 336 244 Q348 230 336 214 M372 274 Q360 258 372 244 Q384 230 372 214" fill="none" stroke="#fff5e4" stroke-width="9" opacity=".85"/>
+  </g>
+  <path d="M318 336 H402" stroke="#ec7a68" stroke-width="12" stroke-linecap="round"/>
+</svg>
