@@ -4073,7 +4073,7 @@ var GOALS=[
   {r:50,name:'Hire a helper',n:1,cur:function(){return state.hired;},tip:'Stock, then the Staff tab.'},
   {r:15,name:'Add a coffee machine',n:1,cur:function(){return countIf(function(i){return i.def.good==='coffee';});},tip:'Build, then Counters. It needs a counter of its own.'},
   {r:30,name:'Serve 5 coffees',n:5,cur:function(){return state.stats.coffee;},tip:'Whoever has Food ticked makes the coffee. Tap someone to see their jobs.'},
-  {r:25,name:'Hang a window',n:1,cur:function(){return countIf(function(i){return i.def.id==='window'||i.def.id==='widewindow';});},tip:'Build, then Walls.'},
+  {r:25,name:'Hang a window',n:1,cur:function(){return countIf(function(i){return /^(window|widewindow|picwin|bigpicwin)$/.test(i.def.id);});},tip:'Build, then Walls.'},
   {r:40,name:'Reach 15 coziness',n:15,cur:function(){return cozyTotal();},tip:'Plants, rugs and seats add the most.'},
   {r:20,name:'Earn 300 coins from sales',n:300,cur:function(){return state.salesXP;}},
   {r:40,name:'Seat 10 customers',n:10,cur:function(){return state.stats.seated;},tip:'Coffee drinkers look for a chair.'},
@@ -5435,31 +5435,44 @@ function lampGlows(){
    It wanders, sits, washes, and naps on rugs and cat beds. Tap it to give it a scratch; customers stop to pet it
    too, and they love the shop a little more for it. */
 var CAT_DAY=3,cat=null;
-var CAT_COATS=[{n:'Marmalade',c:'#e0893c',b:'#f6dcb8',m:'#c46a2a'},{n:'Smoke',c:'#8e8a98',b:'#dcd7e0',m:'#6f6b7a'},{n:'Inkwell',c:'#3a3240',b:'#3a3240',m:'#2a2330'},{n:'Patches',c:'#f3ede4',b:'#f3ede4',m:'#e0893c'}];
+var CAT_COATS=[{n:'Tabby',tabby:true,c:'#9b876f',m:'#54443a',b:'#ece4d6',t:'#b98a5a',muz:'#bfa588',belly:'#a99a86'}];      // a long-haired brown tabby, modelled on Laz's own cat
 var CAT_NAMES=['Biscuit','Mochi','Pippin','Juniper','Clementine','Bramble','Dumpling','Sage'];
 function buildCat(coat){
   // The cat is a small rig. The torso pivots at the hip so it can sit up; the neck rides on the torso;
   // the head and the four legs are placed every frame so the paws always meet the floor.
+  // Markings are shapes sitting a few millimetres proud of the fur, in the same mesh, so they read as colour, not lumps.
   var g=new T.Group(),torso=new T.Group(),head=new T.Group(),tail=new T.Group(),legs=[],paws=new T.Group();
-  var b=new Builder();
-  b.ell(0.105,0.09,0.19,coat.c,0,0.05,0.13);b.ell(0.085,0.06,0.15,coat.b,0,0.015,0.15);      // body and belly
-  if(coat.m!==coat.c)b.ell(0.1,0.067,0.1,coat.m,0,0.075,0.08);      // a saddle of colour, sitting just under the skin of the back so it reads as a marking, not a lump
-  b.add(UNIT_BALL,coat.c,0,0.15,0.27,0,-0.55,0.06,0.085,0.062);      // the neck, leaning forward from the shoulders
-  b.add(UNIT_BALL,coat.b,0,0.13,0.315,0,-0.55,0.042,0.06,0.03);      // pale chest
-  var body=b.mesh(true);torso.add(body);torso.position.set(0,0.12,-0.13);
-  for(var i=0;i<4;i++){
-    var lb=new Builder();lb.rod(0.026,0.023,1,coat.c,0,-0.5,0);var lg=new T.Group();lg.add(lb.mesh(true));legs.push(lg);
-    var pb=new Builder();pb.ell(0.03,0.016,0.036,coat.b,0,0.014,0.006);var pw=pb.mesh(true);pw.userData.paw=i;paws.add(pw);
+  var C=coat.c,S=coat.m,B=coat.b,TAN=coat.t||coat.c,BEL=coat.belly||coat.b,b=new Builder(),i;
+  var BR=[0.112,0.095,0.195],BZ=0.13;      // body radii and centre along the torso
+  b.ell(BR[0],BR[1],BR[2],C,0,0.05,BZ);b.ell(0.088,0.062,0.155,BEL,0,0.012,0.15);      // body and belly
+  if(coat.tabby){
+    b.ell(0.028,0.029,0.17,S,0,0.12,0.11);      // dark line down the spine
+    [-0.14,-0.1,-0.055,-0.015,0.03,0.07].forEach(function(dz,k){var f=Math.sqrt(1-Math.pow(dz/BR[2],2)),sh=k%2?0.012:0;b.ell(0.117*f-sh,BR[1]*f-0.016-sh,0.0105,S,0,0.07+sh,BZ+dz);});      // stripes over the back and down the flanks
   }
-  var hb=new Builder();hb.ball(0.088,coat.c,0,0,0);hb.ell(0.045,0.03,0.035,coat.b,0,-0.025,0.07);
-  [-1,1].forEach(function(s){hb.add(new T.CylinderGeometry(0.003,0.034,0.07,4),coat.c,s*0.05,0.08,-0.005,0.4*s,0);hb.add(new T.CylinderGeometry(0.002,0.02,0.045,4),'#e9a0a0',s*0.05,0.075,0.006,0.4*s,0);
-    hb.ball(0.013,'#2a2026',s*0.034,0.015,0.078);});
-  hb.ball(0.011,'#d67a86',0,-0.008,0.098);
+  b.add(UNIT_BALL,C,0,0.15,0.27,0,-0.55,0.072,0.092,0.07);      // a thick ruff of a neck, leaning forward from the shoulders
+  b.add(UNIT_BALL,B,0,0.125,0.322,0,-0.5,0.05,0.07,0.034);      // pale bib
+  var body=b.mesh(true);torso.add(body);torso.position.set(0,0.12,-0.13);
+  for(i=0;i<4;i++){
+    var lb=new Builder();lb.rod(0.03,0.026,1,C,0,-0.5,0);var lg=new T.Group();lg.add(lb.mesh(true));legs.push(lg);
+    var pb=new Builder();pb.ell(0.033,0.017,0.038,BEL,0,0.015,0.006);var pw=pb.mesh(true);pw.userData.paw=i;paws.add(pw);
+  }
+  var hb=new Builder();hb.ball(0.09,C,0,0,0);
+  [-1,1].forEach(function(s){
+    hb.ell(0.036,0.04,0.04,C,s*0.068,-0.03,0.02);      // fluffy cheeks
+    hb.add(new T.CylinderGeometry(0.003,0.036,0.075,4),C,s*0.052,0.082,-0.008,0.4*s,0);hb.add(new T.CylinderGeometry(0.002,0.022,0.05,4),'#dcc8b2',s*0.052,0.077,0.004,0.4*s,0);
+    if(coat.tabby){hb.ell(0.019,0.014,0.016,TAN,s*0.035,0.006,0.074);hb.ell(0.009,0.022,0.034,S,s*0.03,0.06,0.024);}      // tan round the eyes, side stripes of the forehead M
+    hb.ball(0.013,'#2a2026',s*0.034,0.015,0.08);});
+  if(coat.tabby)hb.ell(0.012,0.022,0.042,S,0,0.066,0.018);      // the middle of the M
+  hb.ell(0.034,0.022,0.03,coat.muz||TAN,0,-0.022,0.072);hb.ell(0.026,0.017,0.026,B,0,-0.043,0.068);      // muzzle and white chin
+  hb.ball(0.011,'#c98a86',0,-0.006,0.1);
   head.add(hb.mesh(true));
-  var tb=new Builder();tb.bar(0.022,0.02,coat.c,0,0,0,0,0.1,-0.1,6);tb.bar(0.02,0.018,coat.m!==coat.c?coat.m:coat.c,0,0.1,-0.1,0,0.21,-0.12,6);
+  // a bushy tail along a gentle curve, ringed and dark-tipped
+  var tp=[[0,0],[0.06,-0.06],[0.11,-0.11],[0.165,-0.135],[0.22,-0.145]],tb=new Builder();
+  for(i=0;i<4;i++){var r0=0.038-i*0.003,r1=r0-0.003;tb.bar(r0,r1,i===3&&coat.tabby?S:C,0,tp[i][0],tp[i][1],0,tp[i+1][0],tp[i+1][1],7);
+    if(coat.tabby&&i<3){var mx=(tp[i][0]+tp[i+1][0])/2,mz=(tp[i][1]+tp[i+1][1])/2,dx=(tp[i+1][0]-tp[i][0])*0.12,dz=(tp[i+1][1]-tp[i][1])*0.12;tb.bar(r0+0.003,r0+0.002,S,0,mx-dx,mz-dz,0,mx+dx,mz+dz,7);}}
   tail.add(tb.mesh(true));tail.rotation.order='YXZ';
-  var hb2=new Builder();[-1,1].forEach(function(s){hb2.ell(0.04,0.055,0.085,coat.c,s*0.062,0,0);});var haunch=hb2.mesh(true);      // folded back legs, only shown when sitting
-  var all=new T.Group();all.add(haunch);all.add(torso);legs.forEach(function(l){all.add(l);});all.add(paws);all.add(head);all.add(tail);all.scale.setScalar(1.3);g.add(all);
+  var hb2=new Builder();[-1,1].forEach(function(s){hb2.ell(0.044,0.058,0.088,C,s*0.064,0,0);});var haunch=hb2.mesh(true);      // folded back legs, only shown when sitting
+  var all=new T.Group();all.add(haunch);all.add(torso);legs.forEach(function(l){all.add(l);});all.add(paws);all.add(head);all.add(tail);all.scale.setScalar(1.32);g.add(all);
   g.userData={haunch:haunch,torso:torso,body:body,head:head,tail:tail,legs:legs,paws:paws};g.traverse(function(o){o.userData.cat=true;});
   return g;
 }
@@ -5674,9 +5687,17 @@ function picWindow(g,segs,v){
   for(i=1;i<segs;i++)b.box(0.035,0.28,0.22,fc,-w/2+i*w/segs,h/2-0.15,-0.08);
   b.box(w+0.26,0.045,0.13,fc,0,-h/2-0.07,0.05);b.box(w+0.3,0.05,0.16,fc,0,-h/2-0.07,-0.27);      // sills inside and out
   g.add(b.mesh(false));
-  var pane=new T.Mesh(new T.BoxGeometry(w,h,0.18),basicMat('#bfe3f2'));pane.position.z=-0.08;g.add(pane);
-  var shine=new Builder();[[-0.22,0.34],[0.05,0.2]].forEach(function(q){shine.box(q[1],h*0.92,0.01,'#e7f6fc',-w/2+w*0.3+q[0]*segs,0,-0.175,0,0);shine.box(q[1],h*0.92,0.01,'#e7f6fc',-w/2+w*0.3+q[0]*segs,0,0.015,0,0);});
-  var sm=shine.mesh(false);sm.scale.set(1,1,1);g.add(sm);
+  var pane=new T.Mesh(new T.BoxGeometry(w,h,0.18),glassMat());pane.position.z=-0.08;g.add(pane);
+}
+var GLASS_MAT=null;
+function glassMat(){      // pale blue glass with two soft diagonal glints painted into it, so no edges for the outline pass to find
+  if(GLASS_MAT)return GLASS_MAT;
+  var c=document.createElement('canvas');c.width=c.height=128;var x=c.getContext('2d');
+  x.fillStyle='#bfe3f2';x.fillRect(0,0,128,128);
+  x.save();x.translate(64,64);x.rotate(-0.5);
+  [[-30,22,0.55],[6,10,0.4]].forEach(function(q){var gr=x.createLinearGradient(q[0]-q[1]/2,0,q[0]+q[1]/2,0);gr.addColorStop(0,'rgba(240,250,255,0)');gr.addColorStop(0.5,'rgba(240,250,255,'+q[2]+')');gr.addColorStop(1,'rgba(240,250,255,0)');x.fillStyle=gr;x.fillRect(q[0]-q[1]/2,-120,q[1],240);});
+  x.restore();
+  var t=new T.CanvasTexture(c);GLASS_MAT=new T.MeshBasicMaterial({map:t});return GLASS_MAT;
 }
 function awningModel(g,segs,v){
   var cols=[['#c8493f','#f4ecdc'],['#4f8a5e','#f1ead6'],['#2f4a6e','#f3f1ea'],['#e0a83a','#f6eedc'],['#d9708a','#fbf1f3']][v],w=segs-0.12,n=Math.max(4,Math.round(w/0.16)),sw=w/n,b=new Builder();
