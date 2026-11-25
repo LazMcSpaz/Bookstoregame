@@ -1872,6 +1872,10 @@ var DEFS=[
     build:function(g,st,v,m,thumb){signBoardModel(g,v,thumb);}},
   {id:'bladesign',name:'Hanging Sign',tab:'Room',cost:25,level:1,cozy:2,layer:'wall',segs:1,wallY:1.45,h:0.5,variants:3,face:'out',band:'blade',sign:true,
     build:function(g,st,v){bladeSignModel(g,v);}},
+  {id:'banner',name:'Release Banner',tab:'Room',cost:10,level:2,cozy:1,layer:'wall',segs:1,wallY:1.25,h:1.05,variants:3,face:'in',band:'mid',needEvent:true,
+    build:function(g,st,v){bannerModel(g,v,false);}},
+  {id:'streetbanner',name:'Street Banner',tab:'Room',cost:15,level:2,cozy:1,layer:'wall',segs:1,wallY:1.3,h:1.05,variants:3,face:'out',band:'high',needEvent:true,
+    build:function(g,st,v){bannerModel(g,v,true);}},
   {id:'lettersign',name:'Letter Sign',tab:'Room',cost:45,level:2,cozy:3,layer:'wall',segs:3,wallY:2.14,h:0.45,variants:3,face:'out',band:'top',sign:true,
     build:function(g,st,v){letterSignModel(g,v);}},
   {id:'window',name:'Window',tab:'Room',cost:15,level:1,cozy:2,layer:'wall',segs:1,wallY:1.05,h:0.9,variants:3,
@@ -1906,7 +1910,7 @@ DEFS.forEach(function(d){
 });
 function styleOpen(st){return level>=STYLE_LEVEL[st];}
 var CATS=['Shelves','Counters','Seating','Tables','Lights','Plants','Rugs','Wall Art','Decor','Kids','Walls','Rooms'];
-var LIGHT_RE=/lamp|sconce|lantern|cbcandle|olfloor/,PLANT_RE=/plant|cactus|palm|mdfig|mdsnake|cbhang|ctjug/,WALLWORK_RE=/window|picwin|awning|sign|flowerbox/;
+var LIGHT_RE=/lamp|sconce|lantern|cbcandle|olfloor/,PLANT_RE=/plant|cactus|palm|mdfig|mdsnake|cbhang|ctjug/,WALLWORK_RE=/window|picwin|awning|sign|flowerbox|banner/;
 function catOf(d){
   if(d.tab==='Kids')return 'Kids';
   if(d.layer==='arch'||d.layer==='edge')return 'Walls';
@@ -1925,7 +1929,7 @@ DEFS.forEach(function(d){d.cat=catOf(d);});
 var CAT_FIRST={Shelves:['shelf','lowshelf','bookdisplay','bookcart','tallcase'],Counters:['counter','register','drawer','espresso','croissants','cake','donuts'],Walls:['archway','frenchdoors','slidingdoor','patiodoor','halfwall','window','widewindow','picwin','bigpicwin','awning','wideawning','flowerbox','signboard','bladesign','lettersign']};
 function catalogList(cat){
   var first=CAT_FIRST[cat]||[];
-  return DEFS.filter(function(d){return !d.hidden&&d.cat===cat&&(!d.needCat||state.cat)&&styleOpen(d.style||'Classic');})
+  return DEFS.filter(function(d){return !d.hidden&&d.cat===cat&&(!d.needCat||state.cat)&&(!d.needEvent||state.event)&&styleOpen(d.style||'Classic');})
     .sort(function(a,b){var fa=first.indexOf(a.id),fb=first.indexOf(b.id);if(fa>=0||fb>=0)return (fa<0?99:fa)-(fb<0?99:fb);
       return STYLE_SETS.indexOf(a.style)-STYLE_SETS.indexOf(b.style)||(a.level||1)-(b.level||1)||a.cost-b.cost;});
 }
@@ -2573,7 +2577,7 @@ function refreshStock(it){
   if(!it.def.cap)return;
   it.group.userData.stock.forEach(function(s){s.m.visible=it.stock>=s.min&&(s.max==null||it.stock<=s.max);});
   var c=centerOf(it);
-  it.bubble.visible=isLow(it)&&backCount(it)<=0;      // only when it needs you: nothing left in the back room
+  it.bubble.visible=isLow(it)&&backCount(it)<=0&&!(it.genre===FEAT_G&&it.def.role==='shelf');      // only when it needs you: nothing left in the back room (a sold-out release can't be reordered)
   it.bubble.position.set(c.x,topOf(it)+0.42,c.z);
 }
 function setVariant(it,v){
@@ -2891,6 +2895,7 @@ function decide(c){
     if(!tryWander(c))leave(c);
     return;
   }
+  if(c.fan){evFanDecide(c);return;}
   var r=rnd();
   c.plan=!byRole('snack').length?['book']:r<0.4?['book']:r<0.68?['snack']:rnd()<0.5?['book','snack']:['snack','book'];      // nobody comes for coffee before there is any
   if(c.kidC&&state.genres.indexOf(4)>=0&&rnd()<0.75){if(c.plan.indexOf('book')<0)c.plan.unshift('book');c.wantGenre=4;showWant(c);}
@@ -2969,6 +2974,8 @@ function showWant(c){
 }
 function hideWant(c){if(c.want)c.want.visible=false;}
 function noteMissed(c){
+  if(c.fan&&state.event)state.event.missed++;
+  if(c.wantGenre===FEAT_G){floater('Sold out!',c.x,c.y+1.5,c.z,'miss');return;}      // counted on the release's own line instead
   var g=GENRES[c.wantGenre];state.missed[g.id]=(state.missed[g.id]||0)+1;mgmtDirty=true;if(state.today)state.today.missed[g.name]=(state.today.missed[g.name]||0)+1;
   floater('No '+g.name,c.x,c.y+1.5,c.z,'miss');
 }
@@ -2977,7 +2984,7 @@ function tryBook(c){
   var all=byRole('shelf').filter(function(s){return s.stock>0;}),list=all.filter(function(s){return s.genre===c.wantGenre;});
   if(!list.length){
     // their genre is out on the floor but there is some in the back and someone restocking: wait a little for it
-    if((c.bookWait||0)<3&&byRole('shelf').some(function(s){return s.genre===c.wantGenre;})&&(state.stock[GENRES[c.wantGenre].id]||0)>0&&hasJob('stock')){
+    if((c.bookWait||0)<(c.fan?7:3)&&byRole('shelf').some(function(s){return s.genre===c.wantGenre;})&&(state.stock[GENRES[c.wantGenre].id]||0)>0&&hasJob('stock')){
       c.bookWait=(c.bookWait||0)+1;wait(c,3,function(){if(!tryBook(c))nextIntent(c);});return true;}
     // their genre is out: note the missed sale; now and then they settle for something else
     if(!c.missNoted){c.missNoted=true;noteMissed(c);c.settle=rnd()<0.35;}
@@ -3067,7 +3074,7 @@ function atFront(it){var h=it.queue[0];return h&&h.qIdx===0&&!h.path.length?h:nu
 function leaveQueue(c){if(c.state==='queue'&&c.item&&c.item.queue){var i=c.item.queue.indexOf(c);if(i>=0)c.item.queue.splice(i,1);}}
 function putBack(c){if(c.p.book.visible){var k=GENRES[c.bookGenre||0].id;state.stock[k]=(state.stock[k]||0)+1;c.p.book.visible=false;mgmtDirty=true;}}
 function giveUp(c){c.gaveUp=true;leaveQueue(c);putBack(c);floater('Too slow',c.x,c.y+1.5,c.z,'miss');c.state='';nextIntent(c);}
-function payAt(c,k){return joinQueue(c,k,function(){state.stats.books++;c.boughtBook=true;if(state.today){state.today.books++;var gn=GENRES[c.bookGenre||0].name;state.today.sold[gn]=(state.today.sold[gn]||0)+1;}var gid=GENRES[c.bookGenre||0].id;state.sold[gid]=(state.sold[gid]||0)+1;earn(c.price||8,c);c.did=true;pop(k.group);c.state='';nextIntent(c);});}
+function payAt(c,k){return joinQueue(c,k,function(){state.stats.books++;c.boughtBook=true;evFanBought(c);if(state.today){state.today.books++;var gn=GENRES[c.bookGenre||0].name;state.today.sold[gn]=(state.today.sold[gn]||0)+1;}var gid=GENRES[c.bookGenre||0].id;state.sold[gid]=(state.sold[gid]||0)+1;earn(c.price||8,c);c.did=true;pop(k.group);c.state='';nextIntent(c);});}
 function goCounter(c){
   c.redo=function(){goCounter(c);};
   var cs=shuffle(byRole('counter')).sort(function(a,b){return a.queue.length-b.queue.length;});      // shortest line first
@@ -3234,12 +3241,13 @@ function simulate(dt){
   if(spawnTimer<=0){
     var pace=tutPace();
     var adults=customers.filter(function(o){return !o.kid;}).length;
-    if(!shopClosed()&&(pace?pace.max>adults&&simT-lastSpawn>=pace.gap*tutVary:adults<maxCustomers())){
+    if(!shopClosed()&&(pace?pace.max>adults&&simT-lastSpawn>=pace.gap*tutVary:adults<maxCustomers()+evFanRoom())){
       var nc=spawnCustomer(),rq=nextRequest();lastSpawn=simT;tutVary=0.9+rnd()*0.35;      // not quite like clockwork
-      if(!pace&&rq==null&&kidSpots().length&&rnd()<KID_CHANCE)spawnKid(nc);
+      if(!pace&&rq==null)evMaybeFan(nc);
+      if(!pace&&rq==null&&!nc.fan&&kidSpots().length&&rnd()<KID_CHANCE)spawnKid(nc);
       if(rq!=null&&simT>=reqHold&&!customers.some(function(o){return o.scout!=null;}))nc.scout=rq;
     }
-    spawnTimer=pace?1:spawnGap()*ratingPace()*(0.7+rnd()*0.6);      // during the first steps, look again every second: the door opens the moment the shop is ready
+    spawnTimer=pace?1:spawnGap()*ratingPace()*evPace()*(0.7+rnd()*0.6);      // during the first steps, look again every second: the door opens the moment the shop is ready
   }
   for(var i=customers.length-1;i>=0;i--)updateCustomer(customers[i],dt);
   for(i=0;i<workers.length;i++)updateWorker(workers[i],dt);
@@ -4124,6 +4132,7 @@ function alertText(inTut){
   if(cutOffRoom()>=0)return buildMode?'The new room has no way in yet. Drag an Archway or a door from the Walls tab onto the low wall between the rooms.':'A room has no way in. Tap Build and add an Archway to the low wall.';
   if(inTut||buildMode)return '';
   if(lastReq&&clock-lastReq.t<90&&!items.some(function(i){return i.def.role==='shelf'&&i.genre===lastReq.g;}))return 'A customer asked for '+GENRES[lastReq.g].name+'. Order it in Stock, then give it a shelf.';
+  var eh=evHint();if(eh)return eh;
   if(items.some(function(i){return i.bubble&&i.bubble.visible;}))return 'Something has run out. Tap Stock to order more.';
   var wait=stations().filter(function(i){return i.queue.length&&!hasJob(jobOf(i));})[0];
   if(wait)return 'Someone is waiting at the '+wait.def.name.toLowerCase()+'. Tap a member of staff and tick '+(jobOf(wait)==='till'?'Cash register':'Food')+'.';
@@ -4361,6 +4370,10 @@ function renderPicker(a,it){
     var G=GENRES[gi],back=state.stock[G.id]||0;
     opt(gi===it.genre,G.name,'<span class="sw" style="background:'+G.col+'"></span><span>'+G.name+'<small>'+(back?back+' in the back':'none in the back')+'</small></span>',true,function(){setGenre(it,gi);});
   });
+  if(picker==='genre'&&state.event&&it.def.id==='bookdisplay'){      // the new release can only go on a Book Display
+    var FG=GENRES[FEAT_G],fb=state.stock.featured||0,e=state.event;
+    opt(it.genre===FEAT_G,FG.name,'<span class="sw" style="background:'+FG.col+'"></span><span>'+esc(FG.name)+'<small>'+(evSoon()?'New release · out Day '+e.release:'New release · '+fb+' in the back')+'</small></span>',true,function(){setGenre(it,FEAT_G);});
+  }
   else if(picker==='top'){      // a colour that looks the same as the counter's own top is listed once
     var pics=TOPS.map(function(t,i){return variantThumb(it.def,it.variant,0,i);}),cur=pics[it.top];
     TOPS.forEach(function(t,i){
@@ -4841,6 +4854,7 @@ function renderMgmt0(){
   if(mgmtTab==='stock'){
     var warn=Date.now()-noteMsg.t<2200;
     $('mgmtNote').textContent=warn?noteMsg.text:'Orders arrive in the back room. Staff carry them out.';$('mgmtNote').classList.toggle('warn',warn);
+    evStockRows(row,buyBtn);
     GENRES.forEach(function(g,gi){
       if(openGenres().indexOf(gi)<0)return;
       var miss=state.missed[g.id]||0;
@@ -4850,7 +4864,7 @@ function renderMgmt0(){
       if(!items.some(function(i){return i.def.good===k;}))return;      // nothing to list until something in the shop uses it
       stockRow(k,GOODS[k].name,GOODS[k].col,'',GOODS[k].cost,GOODS[k].pack);
     });
-    if(openGenres().length<GENRES.length)row('<div class="info"><span>More genres turn up when customers ask for them.</span></div>','locked');
+    if(openGenres().length<GENRES.length-1)row('<div class="info"><span>More genres turn up when customers ask for them.</span></div>','locked');
   }else if(mgmtTab==='jobs'){
     var jw=workers[jobsW]||workers[0];
     $('mgmtNote').textContent='Tick jobs in order. When the first has nothing to do, '+(jw.owner?'I move':'they move')+' on to the next.';
@@ -5000,6 +5014,10 @@ function load(){
     state.today=d.s.today&&typeof d.s.today==='object'?d.s.today:null;if(state.today){['sold','missed'].forEach(function(k){if(!state.today[k]||typeof state.today[k]!=='object')state.today[k]={};});['stars','notes'].forEach(function(k){if(!Array.isArray(state.today[k]))state.today[k]=[];});}
     state.cat=d.s.cat&&typeof d.s.cat==='object'?{coat:clamp(d.s.cat.coat|0,0,3),name:String(d.s.cat.name||'Biscuit').slice(0,20)}:null;state.started=!!d.s.started;state.name=typeof d.s.name==='string'?d.s.name.slice(0,12):'';state.intro=Math.max(0,d.s.intro|0);state.outro=!!d.s.outro;
     if(Array.isArray(d.s.staffNames))state.staffNames=d.s.staffNames.map(function(n){return typeof n==='string'?n.slice(0,12):null;});
+    var ev=d.s.event;
+    state.event=ev&&typeof ev==='object'&&TITLES[ev.t|0]?{t:ev.t|0,release:ev.release|0,pre:Math.max(0,ev.pre|0),cap:Math.max(1,ev.cap|0),sold:ev.sold|0,missed:ev.missed|0,rush:Math.max(0,ev.rush|0),fresh:!!ev.fresh}:null;
+    state.nextEvent=typeof d.s.nextEvent==='number'?d.s.nextEvent:null;state.titlesSeen=Array.isArray(d.s.titlesSeen)?d.s.titlesSeen.filter(function(i){return TITLES[i];}):[];
+    applyFeature();
     level=levelFor(xpTotal());
     var order={arch:0,edge:0,solid:0,rug:0,surf:1,wall:2};
     (d.i||[]).filter(function(r){return DEF[r[0]];}).sort(function(a,b){return order[DEF[a[0]].layer]-order[DEF[b[0]].layer];}).forEach(function(r){
@@ -5347,6 +5365,8 @@ var REVIEWS={
   cozy:['So cozy. I could stay all day.','Such a lovely place to sit and read.','Warm, quiet and beautiful. My new favourite spot.'],
   book:['Found the perfect {g} book!','Great {g} section.','Walked out with a {g} book I cannot wait to start.'],
   coffee:['Good coffee and a good book. Perfect afternoon.','The coffee here is lovely.'],
+  fanGot:['Got my copy of {g}! Best day ever.','Finally have {g}. Not sleeping tonight.','They had {g} on release day. Legends.'],
+  fanMissed:['Sold out of {g} already? Next time.','Came for {g}. They were out.','Missed {g} again. Sigh.'],
   missed:['Wish there were more {g} books.','Nothing in {g} today. I will try again.','Came for {g} and left empty-handed.'],
   wait:['Lovely shop, but the line was slow.','Waited a long time at the counter.'],
   meh:['Nice little shop.','Pleasant place to browse.','Cute shop. Might come back.']
@@ -5357,7 +5377,8 @@ function review(c){
   if(c.spent>0){s+=1;kind=c.boughtBook?'book':'coffee';}
   if(cozyTotal()>=30){s+=0.5;if(kind==='meh'||rnd()<0.3)kind='cozy';}
   if(c.petted){s+=1;kind='cat';}
-  if(c.missNoted){s-=1.5;if(!c.spent){kind='missed';}}
+  if(c.fan){if(c.boughtBook&&c.bookGenre===FEAT_G){s+=0.5;kind='fanGot';}else if(c.missNoted){s-=1;kind='fanMissed';}}
+  else if(c.missNoted){s-=1.5;if(!c.spent){kind='missed';}}
   if(c.gaveUp||(c.waitT||0)>PATIENCE*0.7){s-=1;if(!c.petted)kind='wait';}
   s=clamp(Math.round(s*2)/2,1,5);
   state.today.stars.push(s);
@@ -5367,7 +5388,7 @@ function starText(s){var o='',i,n=Math.round(s);for(i=1;i<=5;i++)o+=n>=i?'\u2605
 function endDay(){
   state.dayOver=true;var t=state.today||freshToday(),avg=t.stars.length?t.stars.reduce(function(a,b){return a+b;},0)/t.stars.length:null;
   t.avg=avg;if(avg!=null){t.prevRating=state.rating;state.rating=state.rating==null?avg:state.rating*0.6+avg*0.4;}
-  save();showDaySheet();
+  evMaybeAnnounce();save();showDaySheet();
 }
 function bestOf(o){var k=null,n=0;Object.keys(o).forEach(function(x){if(o[x]>n){n=o[x];k=x;}});return k?[k,n]:null;}
 var DS_ICONS={
@@ -5398,6 +5419,7 @@ function showDaySheet(){
   var top=bestOf(t.sold);if(top)row('★','#e0a020','Best seller: <b>'+top[0]+'</b><small>'+top[1]+' sold today</small>');
   var miss=bestOf(t.missed);if(miss)row('!','#d77a6a','<b>'+miss[0]+'</b> was asked for '+miss[1]+(miss[1]===1?' time':' times')+'<small>Nobody found any. Stocking it brings those sales back.</small>','warn');
   if(t.pets){var coat=state.cat&&CAT_COATS[state.cat.coat]||CAT_COATS[0];row('<svg viewBox="0 0 24 24" width="17" height="17"><g fill="#fff"><ellipse cx="12" cy="15.5" rx="4.6" ry="3.8"/><circle cx="6.3" cy="10.5" r="2"/><circle cx="9.6" cy="7.2" r="2"/><circle cx="14.4" cy="7.2" r="2"/><circle cx="17.7" cy="10.5" r="2"/></g></svg>',coat.n==='Patches'?'#c9a27e':coat.c,'<b>'+(state.cat?state.cat.name:'The cat')+'</b> got '+t.pets+(t.pets===1?' pat':' pats')+'<small>'+(t.pets>=15?'The most loved cat on the street.':t.pets>=5?'Customers keep stopping to say hello.':'A quiet day of naps.')+'</small>');}
+  evSheet(row);
   if(t.notes.length){
     var h=document.createElement('h3');h.textContent='What customers said';el.appendChild(stag(h));
     var ns=t.notes.slice().sort(function(a,b){return b.s-a.s;}),show=[ns[0]];
@@ -5418,6 +5440,7 @@ function nextDay(){
   clearingDay=true;customers.slice().forEach(function(c){removeCustomer(c);});clearingDay=false;
   workers.forEach(function(w){w.task=null;});
   if(!state.cat&&state.day>=CAT_DAY)catArrives();
+  evDayStart();
   save();updateClock(true);
 }
 var clockShown='';
@@ -5786,7 +5809,159 @@ function letterSignModel(g,v){
   var p=textPlane(signTexture(2,v,900,150),2.7,0.45,v===1);p.position.set(0,0.02,-0.12);p.rotation.y=Math.PI;g.add(p);
 }
 
-window.__shop={setOutside:function(o){setOutside(o);},outside:function(){return outsideView;},renameShop:function(n){renameShop(n);},dayOn:function(){return dayOn();},endDay:function(){endDay();},nextDay:function(){nextDay();},catArrives:function(){catArrives();},cat:function(){return cat;},petCat:function(){petCat(true);},hitCat:function(x,y){return hitCat(x,y);},peek:function(src){return eval(src);},renderAudio:function(a,b,c){return renderAudio(a,b,c);},shopStyle:function(){return shopStyle();},audio:AU,sfx:function(n){sfx(n);},lowWallNudge:function(a,b,c,d){return lowWallNudge(a,b,c,d);},edgeBetween:function(a,b,c,d){return edgeBetween(a,b,c,d);},roomAt:function(x,z){return roomAt(x,z);},setKidChance:function(v){KID_CHANCE=v;},spawnKid:function(c){return spawnKid(c);},state:state,items:items,customers:customers,addItem:addItem,simulate:simulate,cam:cam,turn:turn,walls:walls,
+/* ---------- book releases: a featured title is announced, you pre-order a limited run, put up banners, and on
+   release day fans queue for it at your Book Displays. The title rides on the genre system as one extra genre,
+   so shelves, the back room and restocking all work for it unchanged. ---------- */
+var TITLES=[
+  {t:'The Duke Who Wouldn\'t Shut Up About Boats',a:'Clarissa Fainting',g:'romance',c:'#3f6fa8'},
+  {t:'Love in the Time of Sourdough',a:'Bree Ochet',g:'romance',c:'#d9845a'},
+  {t:'Fifty Shades of Beige',a:'Ann Tique',g:'romance',c:'#c9b38f'},
+  {t:'My Neighbour\'s Lighthouse Is Too Big',a:'Marisol Tide',g:'romance',c:'#d0505f'},
+  {t:'The Dragon Who Was Mostly Fine',a:'T. R. Ollbridge',g:'fantasy',c:'#4f9b46'},
+  {t:'Sword of a Thousand Pointy Bits',a:'Gareth Mightily',g:'fantasy',c:'#6b5fb0'},
+  {t:'The Wizard\'s Very Long Lunch',a:'Ambrose Quill',g:'fantasy',c:'#2f7f86'},
+  {t:'Book Seven of an Unfinished Trilogy',a:'R. R. Patience',g:'fantasy',c:'#8a3a3a'},
+  {t:'Murder at the Gluten-Free Bakery',a:'Agatha Crispy',g:'mystery',c:'#b5473a'},
+  {t:'The Butler Did Brunch',a:'Inspector Lou Pholes',g:'mystery',c:'#3b4a6b'},
+  {t:'Gone Cat',a:'Gillian Whiskers',g:'mystery',c:'#2d2230'},
+  {t:'Death by Book Club',a:'Constance Readwell',g:'mystery',c:'#6b3a5a'},
+  {t:'Goodnight, Spaceship',a:'Mabel Moon',g:'kids',c:'#3d5aa8'},
+  {t:'The Very Hungry Librarian',a:'Eric Carlisle',g:'kids',c:'#e0a020'},
+  {t:'Dinosaurs Do NOT Like Bathtime',a:'Rex Scrubbs',g:'kids',c:'#4fa3a5'},
+  {t:'There\'s a Badger in My Backpack',a:'Penny Pockets',g:'kids',c:'#c7653a'},
+  {t:'Salt, Fat, Acid, Naps',a:'Samin Snoozrat',g:'cooking',c:'#e2b33a'},
+  {t:'The Joy of Toast',a:'Crumb Hutchins',g:'cooking',c:'#c98a4b'},
+  {t:'One Pan, Zero Plans',a:'Rusty Skillet',g:'cooking',c:'#5b6b73'},
+  {t:'Soup Is Just Wet Salad',a:'Chef Dubious',g:'cooking',c:'#6f9a4a'}];
+var EV={LEAD:3,DAYS:[1,0.5,0.25],COST:5,PRICE:14,PACK:4,FIRST:5,GAP:[4,5],BUZZ:4};
+var FEAT_G=GENRES.length;
+GENRES.push({id:'featured',name:'New release',level:999,cost:EV.COST,price:EV.PRICE,col:'#3f6fa8',cols:['#3f6fa8','#3f6fa8','#3f6fa8','#3f6fa8','#3f6fa8']});
+function shade(hex,k){var c=new T.Color(hex);if(k>0)c.lerp(new T.Color('#ffffff'),k);else c.lerp(new T.Color('#000000'),-k);return '#'+c.getHexString();}
+function applyFeature(){      // the extra genre takes the name and cover colours of the current title
+  var e=state.event,G=GENRES[FEAT_G],T0=e&&TITLES[e.t];
+  G.name=T0?T0.t:'New release';G.col=T0?T0.c:'#3f6fa8';G.cols=[G.col,G.col,shade(G.col,0.18),G.col,shade(G.col,-0.15)];
+  delete wantTex.featured;
+}
+function evTitle(){return state.event?TITLES[state.event.t]:null;}
+function evLive(){var e=state.event;return !!e&&state.day>=e.release&&state.day<e.release+EV.DAYS.length;}
+function evSoon(){var e=state.event;return !!e&&state.day<e.release;}
+function evDemand(){return evLive()?EV.DAYS[state.day-state.event.release]:0;}
+function evBanners(){return items.filter(function(i){return i.def.needEvent;});}
+function evBuzz(){return Math.min(EV.BUZZ,evBanners().length);}
+function evDisplays(){return items.filter(function(i){return i.def.id==='bookdisplay';});}
+function evFeatDisplays(){return items.filter(function(i){return i.def.role==='shelf'&&i.genre===FEAT_G;});}
+function evCap(){return 10+4*Math.min(5,level);}
+// a new release is announced on the end-of-day screen, EV.LEAD days ahead
+function evMaybeAnnounce(){
+  if(state.event||!state.started||state.goal<TUT_N)return;
+  if(state.nextEvent==null)state.nextEvent=Math.max(EV.FIRST,state.day+1);
+  if(state.day+1<state.nextEvent||level<DEF.bookdisplay.level)return;
+  var open=openGenres().map(function(i){return GENRES[i].id;}),seen=state.titlesSeen||[];
+  var pool=TITLES.map(function(t,i){return i;}).filter(function(i){return open.indexOf(TITLES[i].g)>=0&&seen.indexOf(i)<0;});
+  if(!pool.length){state.titlesSeen=[];pool=TITLES.map(function(t,i){return i;}).filter(function(i){return open.indexOf(TITLES[i].g)>=0;});}
+  var ti=pick(pool);
+  state.event={t:ti,release:state.day+EV.LEAD,pre:0,cap:evCap(),sold:0,missed:0,rush:0,fresh:true};
+  state.titlesSeen=(state.titlesSeen||[]).concat([ti]);
+  applyFeature();refreshBanners();
+  freshIds=freshIds.concat(['banner','streetbanner']);if(buildMode)renderCatalog();
+}
+// the start of each day moves the release along
+function evDayStart(){
+  var e=state.event;if(!e)return;e.fresh=false;
+  if(state.day===e.release){
+    var copies=e.pre;state.stock.featured=(state.stock.featured||0)+copies;e.pre=0;e.rush=copies?Math.round(3+1.5*evBuzz()):3;
+    evFeatDisplays().forEach(function(it){fillFromBack(it);});
+    refreshBanners();
+    setTimeout(function(){toast(copies?'Release day! '+copies+' copies of '+TITLES[e.t].t+' arrived.':'Release day for '+TITLES[e.t].t+', and no copies on order.');},500);
+  }else if(state.day>=e.release+EV.DAYS.length)evFinish();
+  mgmtDirty=true;
+}
+function evFinish(){      // the rush is over: leftover copies join their genre, the displays go back to it, banners come down
+  var e=state.event,T0=TITLES[e.t],gi=GENRES.findIndex(function(g){return g.id===T0.g;});if(gi<0)gi=0;
+  var back=(state.stock.featured||0)+e.pre;state.stock[T0.g]=(state.stock[T0.g]||0)+back;state.stock.featured=0;
+  evFeatDisplays().forEach(function(it){var n=it.stock;it.stock=0;it.genre=gi;setVariant(it,it.variant);it.stock=n;refreshStock(it);});
+  var refund=0;evBanners().forEach(function(it){refund+=it.def.cost;removeItem(it);});state.coins+=refund;
+  state.event=null;state.nextEvent=state.day+EV.GAP[0]+Math.floor(rnd()*(EV.GAP[1]-EV.GAP[0]+1));applyFeature();updateHUD();
+  setTimeout(function(){toast('The '+T0.t+' rush is over.'+(refund?' Banners taken down, '+refund+' coins back.':''));},1400);
+}
+// customers: on release days some arrive for the new book, and on the day itself a crowd is waiting at opening
+function evFanRoom(){return evLive()?(state.day===state.event.release?4:2):0;}
+function evPace(){var e=state.event;if(evLive()&&e.rush>0)return 0.12;if(evLive()&&!((state.stock.featured||0)+shelfTotals('featured').on))return 1;return evLive()?(state.day===e.release?0.6:0.8):1;}
+function evMaybeFan(c){
+  if(!evLive())return;var e=state.event;
+  var left=(state.stock.featured||0)+shelfTotals('featured').on;      // word gets round once it has sold out
+  if(e.rush>0){e.rush--;c.fan=true;return;}
+  if(rnd()<Math.min(0.7,0.45*evDemand()*(1+0.25*evBuzz()))*(left>0?1:0.12))c.fan=true;
+}
+function evFanDecide(c){
+  c.plan=byRole('snack').length&&rnd()<0.35?['book','snack']:['book'];c.wantGenre=FEAT_G;showWant(c);nextIntent(c);
+}
+function evFanBought(c){if(state.event&&c.bookGenre===FEAT_G)state.event.sold++;}
+// pre-orders: a limited run, paid now, delivered on release morning
+function evPreorder(n){
+  var e=state.event;if(!evSoon())return;n=Math.min(n,e.cap-e.pre);var cost=n*EV.COST;
+  if(n<=0){noteMsg={t:Date.now(),text:'That is every copy the publisher will send.'};renderMgmt();return;}
+  if(state.coins<cost){noteMsg={t:Date.now(),text:'Not enough coins for '+n+' copies.'};renderMgmt();return;}
+  state.coins-=cost;e.pre+=n;sfx('coin');updateHUD();save();lastBuy={k:'featured',t:Date.now(),n:n};renderMgmt();
+}
+function evStockRows(row,buyBtn){
+  var e=state.event,T0=evTitle();if(!T0)return;
+  var dleft=e.release-state.day,disp=evFeatDisplays().length;
+  if(evSoon()){
+    var left=e.cap-e.pre;
+    var d=row('<span class="chip" style="background:'+T0.c+'"></span><div class="gm"><div class="gn">'+esc(T0.t)+' <i class="tag hot">Out '+(dleft===1?'tomorrow':'Day '+e.release)+'</i></div><div class="gs"><span>'+e.pre+' pre-ordered · '+left+' left</span><span'+(disp?'':' class="none"')+'>'+(disp?disp+' display'+(disp>1?'s':'')+' ready':'no display set')+'</span></div></div>');
+    var b=document.createElement('button'),n=Math.min(EV.PACK,left);b.className='buy two'+(!n||state.coins<n*EV.COST?' off':'');
+    b.innerHTML=n?'<b>+'+n+'</b><span>'+COIN_SVG+(n*EV.COST)+'</span>':'<b>All</b><span>ordered</span>';b.addEventListener('click',function(){evPreorder(EV.PACK);});d.appendChild(b);
+  }else if(evLive()){
+    var t=shelfTotals('featured'),back=state.stock.featured||0;
+    row('<span class="chip" style="background:'+T0.c+'"></span><div class="gm"><div class="gn">'+esc(T0.t)+' <i class="tag hot">New release</i></div><div class="gs"><span>'+(t.n?t.on+'/'+t.cap+' on displays':'<b class="none">no display set</b>')+'</span><span'+(back?'':' class="none"')+'>'+back+' in the back</span></div></div>');
+  }
+}
+function evHint(){
+  var e=state.event,T0=evTitle();if(!T0)return '';
+  if(evSoon()){
+    if(!evDisplays().length)return T0.t+' comes out on Day '+e.release+'. Build a Book Display (Shelves tab) for it.';
+    if(!evFeatDisplays().length)return 'Tap a Book Display and set it to '+T0.t+' before Day '+e.release+'.';
+    if(!e.pre)return 'Pre-order copies of '+T0.t+' in Stock. Only '+e.cap+' are being printed.';
+    if(!evBanners().length)return 'Banners (Walls tab) bring more fans on release day.';
+  }else if(evLive()&&!evFeatDisplays().length&&(state.stock.featured||0)>0)return 'Copies of '+T0.t+' are in the back. Tap a Book Display and set it to the new release.';
+  return '';
+}
+function evSheet(row){      // the end-of-day screen: what's coming, or how the release went
+  var e=state.event,T0=evTitle();if(!T0)return;
+  var book='<svg viewBox="0 0 24 24" width="16" height="16"><rect x="6" y="3" width="12" height="18" rx="2" fill="#fff"/></svg>';
+  if(e.fresh)row(book,T0.c,'<b>Coming Day '+e.release+':</b> <i>'+esc(T0.t)+'</i> by '+esc(T0.a)+'<small>Pre-order copies in Stock (only '+e.cap+'), set a Book Display to it, and put up banners to bring more fans.</small>');
+  else if(evSoon())row(book,T0.c,'<i>'+esc(T0.t)+'</i> is out '+(e.release-state.day===1?'tomorrow':'on Day '+e.release)+'<small>'+e.pre+' copies pre-ordered · '+evFeatDisplays().length+' display'+(evFeatDisplays().length===1?'':'s')+' · '+evBanners().length+' banner'+(evBanners().length===1?'':'s')+'</small>');
+  else if(evLive())row(book,T0.c,'<i>'+esc(T0.t)+'</i>: '+e.sold+' sold so far'+(e.missed?', '+e.missed+' fans missed out':'')+'<small>'+(state.day===e.release+EV.DAYS.length-1?'Tomorrow the rush is over. Leftovers go to '+GENRES.find(function(g){return g.id===T0.g;}).name+'.':'Fans keep coming for a couple more days.')+'</small>');
+}
+// banners: only in the catalog while a release is coming or on; they show the title and the day
+var bannerCache={};
+function bannerTexture(w,h){
+  var T0=evTitle(),e=state.event,day=!e?'':state.day>=e.release?'OUT NOW':'OUT DAY '+e.release,key=(T0?T0.t:'-')+'|'+day+'|'+w+'|'+h;
+  if(bannerCache[key])return bannerCache[key];
+  var c=document.createElement('canvas');c.width=w;c.height=h;var x=c.getContext('2d'),col=T0?T0.c:'#3f6fa8';
+  x.fillStyle=col;x.fillRect(0,0,w,h);x.fillStyle='rgba(255,255,255,.14)';x.fillRect(0,0,w,h*0.16);
+  x.strokeStyle='#fff5e4';x.lineWidth=w*0.02;x.strokeRect(w*0.06,w*0.06,w-w*0.12,h-w*0.12);
+  x.fillStyle='#fff5e4';x.textAlign='center';x.textBaseline='middle';
+  x.font='800 '+Math.round(w*0.1)+'px Nunito, sans-serif';x.fillText('NEW',w/2,h*0.13);
+  var words=(T0?T0.t:'New release').split(' '),lines=[],cur='',size=Math.round(w*0.15);
+  function wrap(){lines=[];cur='';x.font='800 '+size+'px Fraunces, Georgia, serif';words.forEach(function(wd){var t=cur?cur+' '+wd:wd;if(x.measureText(t).width>w*0.8&&cur){lines.push(cur);cur=wd;}else cur=t;});if(cur)lines.push(cur);}
+  wrap();while(size>12&&(lines.length*size*1.1>h*0.5||lines.some(function(l){return x.measureText(l).width>w*0.84;}))){size-=2;wrap();}
+  lines.forEach(function(l,i){x.fillText(l,w/2,h*0.46+(i-(lines.length-1)/2)*size*1.1);});
+  if(T0){x.font='600 '+Math.round(w*0.065)+'px Nunito, sans-serif';x.globalAlpha=0.85;x.fillText(T0.a,w/2,h*0.75);x.globalAlpha=1;}
+  x.fillStyle='#fff5e4';x.fillRect(w*0.14,h*0.82,w*0.72,h*0.1);x.fillStyle=col;x.font='800 '+Math.round(w*0.075)+'px Nunito, sans-serif';x.fillText(day,w/2,h*0.872);
+  var tex=new T.CanvasTexture(c);tex.encoding=T.sRGBEncoding;tex.anisotropy=4;bannerCache[key]=tex;return tex;
+}
+function refreshBanners(){bannerCache={};evBanners().forEach(function(it){setVariant(it,it.variant);});['banner','streetbanner'].forEach(function(id){if(thumbs[id])oneThumb(DEF[id]);});if(buildMode)renderCatalog();}
+function bannerModel(g,v,out){
+  var rod=['#3a2a20','#b58a3a','#2e2a33'][v],b=new Builder(),z=out?-WALL_T-0.05:0.04,w=0.62,h=1.0;
+  b.bar(0.016,0.016,rod,-w/2-0.06,h/2+0.02,z,w/2+0.06,h/2+0.02,z,8);b.ball(0.026,rod,-w/2-0.07,h/2+0.02,z);b.ball(0.026,rod,w/2+0.07,h/2+0.02,z);
+  b.box(w,0.03,0.02,rod,0,-h/2-0.01,z);
+  g.add(b.mesh(true));
+  var p=textPlane(bannerTexture(256,420),w,h);p.position.set(0,0,z+(out?-0.012:0.012));if(out)p.rotation.y=Math.PI;g.add(p);
+}
+
+window.__shop={evAnnounce:function(){state.nextEvent=0;evMaybeAnnounce();},evDayStart:function(){evDayStart();},FEAT_G:function(){return FEAT_G;},TITLES:TITLES,setOutside:function(o){setOutside(o);},outside:function(){return outsideView;},renameShop:function(n){renameShop(n);},dayOn:function(){return dayOn();},endDay:function(){endDay();},nextDay:function(){nextDay();},catArrives:function(){catArrives();},cat:function(){return cat;},petCat:function(){petCat(true);},hitCat:function(x,y){return hitCat(x,y);},peek:function(src){return eval(src);},renderAudio:function(a,b,c){return renderAudio(a,b,c);},shopStyle:function(){return shopStyle();},audio:AU,sfx:function(n){sfx(n);},lowWallNudge:function(a,b,c,d){return lowWallNudge(a,b,c,d);},edgeBetween:function(a,b,c,d){return edgeBetween(a,b,c,d);},roomAt:function(x,z){return roomAt(x,z);},setKidChance:function(v){KID_CHANCE=v;},spawnKid:function(c){return spawnKid(c);},state:state,items:items,customers:customers,addItem:addItem,simulate:simulate,cam:cam,turn:turn,walls:walls,
   cozy:cozyTotal,level:function(){return level;},update:updateHUD,select:select,toScreen:toScreen,wallPose:wallPose,DEFS:DEFS,
   buildPerson:buildPerson,STYLES:STYLES,peopleRoot:peopleRoot,roots:[roomRoot,itemsRoot],workers:workers,GENRES:GENRES,trend:trend,openMgmt:openMgmt,buy:buy,hire:hire,goals:GOALS,checkGoals:checkGoals,commandOwner:function(it){return assign(workers[0],it);},assign:function(i,it){return assign(workers[i],it);},setBuild:setBuild,canPlace:canPlace,DEF:DEF,walkable:walkable,solidAt:function(x,z){return solid[z][x]?solid[z][x].def.id:null;},building:function(){return buildMode;},edgeBetween:edgeBetween,setTop:setTop,lookImage:lookImage,room:function(){return [W,D,DOOR.x,DOOR.z];},rooms:function(){return rooms.map(function(R){return [R.x,R.z,R.w,R.d];});},roomSpots:roomSpots,addRoom:addRoom,startExpand:startExpand,cutOffRoom:cutOffRoom,roomAt:roomAt,nextRequest:function(){return nextRequest();},tutPhase:function(){return tutPhase();},cue:function(){return cueNow?{s:cueNow.s,d:cueNow.d,p:cueNow.p,w:cueNow.w,m:!!cueNow.m,seen:cueSeen}:null;},tick:function(){checkGoals();renderGoal();updatePointer(performance.now());},picker:function(){return picker;},staffMarks:staffMarks,backDoor:function(){return {r:backDoor.r,w:backDoor.w,seg:backDoor.seg,x:backDoor.tile.x,z:backDoor.tile.z};},doorScreen:function(){var p=new T.Vector3();backDoor.g.getWorldPosition(p);var q=toScreen(p.x,1.0,p.z);return [q.x,q.y];},paintAt:function(cx,cy){return paintAt(cx,cy);},startPaint:startPaint,stopPaint:stopPaint,paintAll:function(){return paintAll();},painter:function(){return painter;},walkable:walkable,jobsOpen:function(){return jobsOpen();},openJobs:openJobs,variantThumb:variantThumb,tileRes:tileRes,queueSlots:queueSlots,hitItem:hitItem,hitWorker:hitWorker,tap:tap,sel:function(){return selWorker;},
   setLevelXP:function(xp){state.salesXP=xp;updateHUD();},
