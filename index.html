@@ -174,6 +174,11 @@ body.moving #sellZone{display:grid}
 #clock.on{display:flex}
 #clock i{font-style:normal;color:var(--honey);font-size:15px}
 #clock.late{background:#f3d9c9}
+#mgmt .catrow{flex-wrap:wrap}
+#mgmt .catpic{width:46px;height:46px;flex:none;border-radius:12px;background:#f6ecdc;object-fit:contain}
+#mgmt .catbtns{display:flex;gap:6px;margin-left:auto}
+#mgmt .catbtns .buy{min-width:38px;padding:0 10px}
+#mgmt .catname{font:inherit;font-weight:800;font-size:15px;width:100%;max-width:150px;padding:4px 8px;border:2px solid var(--ink);border-radius:8px;background:#fff;color:var(--ink)}
 #daySheet{position:absolute;inset:0;background:rgba(30,24,52,.66);display:none;align-items:center;justify-content:center;padding:18px;z-index:30}
 #daySheet.on{display:flex}
 #daySheet .sheet{background:var(--paper);border-radius:22px;padding:0 0 16px;max-width:340px;width:100%;max-height:92%;overflow:auto;box-shadow:0 18px 40px rgba(0,0,0,.35);animation:dsPop .35s cubic-bezier(.2,1.4,.4,1)}
@@ -4864,6 +4869,23 @@ function renderMgmt0(){
       var d=row('<span class="who" style="background:'+(w.owner?'#f4b942':'#3d8f8a')+'">'+(w.owner?'You':i)+'</span><div class="info"><b>'+esc(staffName(w))+(w.owner?(state.name?' (you)':', the owner'):'')+'</b><span>'+esc(jobsLabel(w).charAt(0).toUpperCase()+jobsLabel(w).slice(1))+'. '+esc(w.doing)+'</span></div>');
       var eb=document.createElement('button');eb.className='buy';eb.textContent='Jobs';eb.addEventListener('click',function(){openJobs(i);});d.appendChild(eb);
     });
+    if(state.cat){
+      var ci=state.cat.coat|0,co=CAT_COATS[ci]||CAT_COATS[0];
+      var cr=row('<img class="catpic" alt="" src="'+catPortrait(ci)+'"><div class="info"><b>'+esc(state.cat.name)+'</b><span>The shop cat · '+co.look+'</span></div>','catrow');
+      var cb=document.createElement('div');cb.className='catbtns';
+      cb.innerHTML='<button class="buy plain" aria-label="Previous look">‹</button><button class="buy plain" aria-label="Next look">›</button><button class="buy plain">Rename</button>';
+      var bs=cb.querySelectorAll('button');
+      bs[0].addEventListener('click',function(){recoatCat((ci+CAT_COATS.length-1)%CAT_COATS.length);renderMgmt();});
+      bs[1].addEventListener('click',function(){recoatCat((ci+1)%CAT_COATS.length);renderMgmt();});
+      bs[2].addEventListener('click',function(){
+        var info=cr.querySelector('.info');info.innerHTML='<input class="catname" maxlength="16" aria-label="Cat name"><span>Type a name, then tap Save</span>';
+        var inp=info.querySelector('input');inp.value=state.cat.name;inp.focus();inp.select();
+        bs[2].textContent='Save';bs[0].style.display=bs[1].style.display='none';
+        function done(){var v=inp.value.trim().slice(0,16);if(v){state.cat.name=v;save();}renderMgmt();}
+        bs[2].onclick=function(e){e.stopImmediatePropagation();done();};inp.addEventListener('keydown',function(e){if(e.key==='Enter')done();});
+      },{once:true});
+      cr.appendChild(cb);
+    }
     var h=HIRE[state.hired];
     if(h){
       var d=row('<span class="who" style="background:var(--mute)">+</span><div class="info"><b>Hire a helper</b><span>'+(level<h.level?'Needs shop level '+h.level:'Takes the jobs nobody else covers yet')+'</span></div>',level<h.level?'locked':'');
@@ -5435,30 +5457,37 @@ function lampGlows(){
    It wanders, sits, washes, and naps on rugs and cat beds. Tap it to give it a scratch; customers stop to pet it
    too, and they love the shop a little more for it. */
 var CAT_DAY=3,cat=null;
-var CAT_COATS=[{n:'Tabby',tabby:true,c:'#9b876f',m:'#54443a',b:'#ece4d6',t:'#b98a5a',muz:'#bfa588',belly:'#a99a86'}];      // a long-haired brown tabby, modelled on Laz's own cat
+var CAT_COATS=[      // the shop cat comes in four looks; each has its own name until the player renames it
+  {n:'Fitz',look:'Brown tabby',tabby:true,fluff:1,c:'#9b876f',m:'#54443a',b:'#ece4d6',t:'#b98a5a',muz:'#bfa588',belly:'#a99a86'},      // modelled on Laz's own cat
+  {n:'Fimly',look:'Fluffy grey',tabby:true,soft:true,fluff:1.8,c:'#a9a7ad',m:'#85828b',b:'#f3f1f2',t:'#c4bcb6',muz:'#d6d0cd',belly:'#c4c1c7'},
+  {n:'Marmalade',look:'Orange tabby',tabby:true,fluff:1,c:'#e0913f',m:'#b2652d',b:'#fbe7cc',t:'#eaa65e',muz:'#f3c99c',belly:'#f0c597'},
+  {n:'Smudge',look:'Dark grey',tabby:false,fluff:0.35,c:'#5b5860',m:'#4a474f',b:'#7e7a83',t:'#5b5860',muz:'#6c6872',belly:'#67646c'}];
 var CAT_NAMES=['Biscuit','Mochi','Pippin','Juniper','Clementine','Bramble','Dumpling','Sage'];
 function buildCat(coat){
   // The cat is a small rig. The torso pivots at the hip so it can sit up; the neck rides on the torso;
   // the head and the four legs are placed every frame so the paws always meet the floor.
   // Markings are shapes sitting a few millimetres proud of the fur, in the same mesh, so they read as colour, not lumps.
   var g=new T.Group(),torso=new T.Group(),head=new T.Group(),tail=new T.Group(),legs=[],paws=new T.Group();
-  var C=coat.c,S=coat.m,B=coat.b,TAN=coat.t||coat.c,BEL=coat.belly||coat.b,b=new Builder(),i;
-  var BR=[0.112,0.095,0.195],BZ=0.13;      // body radii and centre along the torso
+  var C=coat.c,S=coat.m,B=coat.b,TAN=coat.t||coat.c,BEL=coat.belly||coat.b,b=new Builder(),i,F=coat.fluff||1;
+  function fl(x,k){return x*(1+(F-1)*k);}      // fluffier coats grow the ruff, cheeks, tail and body
+  var BR=[fl(0.112,0.13),fl(0.095,0.11),fl(0.195,0.05)],BZ=0.13;      // body radii and centre along the torso
   b.ell(BR[0],BR[1],BR[2],C,0,0.05,BZ);b.ell(0.088,0.062,0.155,BEL,0,0.012,0.15);      // body and belly
   if(coat.tabby){
-    b.ell(0.028,0.029,0.17,S,0,0.12,0.11);      // dark line down the spine
-    [-0.14,-0.1,-0.055,-0.015,0.03,0.07].forEach(function(dz,k){var f=Math.sqrt(1-Math.pow(dz/BR[2],2)),sh=k%2?0.012:0;b.ell(0.117*f-sh,BR[1]*f-0.016-sh,0.0105,S,0,0.07+sh,BZ+dz);});      // stripes over the back and down the flanks
+    b.ell(0.028,0.029,0.17,S,0,BR[1]+0.025,0.11);      // dark line down the spine
+    [-0.14,-0.1,-0.055,-0.015,0.03,0.07].forEach(function(dz,k){var f=Math.sqrt(1-Math.pow(dz/BR[2],2)),sh=k%2?0.012:0;b.ell((BR[0]+0.005)*f-sh,BR[1]*f-0.016-sh,coat.soft?0.008:0.0105,S,0,0.07+sh,BZ+dz);});      // stripes over the back and down the flanks
   }
-  b.add(UNIT_BALL,C,0,0.15,0.27,0,-0.55,0.072,0.092,0.07);      // a thick ruff of a neck, leaning forward from the shoulders
-  b.add(UNIT_BALL,B,0,0.125,0.322,0,-0.5,0.05,0.07,0.034);      // pale bib
+  b.add(UNIT_BALL,C,0,0.15,0.27,0,-0.55,fl(0.072,0.35),fl(0.092,0.22),fl(0.07,0.3));      // a thick ruff of a neck, leaning forward from the shoulders
+  b.add(UNIT_BALL,B,0,0.125,fl(0.322,0.03),0,-0.5,fl(0.05,0.35),fl(0.07,0.25),fl(0.034,0.35));
+  if(F>1.3){b.add(UNIT_BALL,C,0,0.06,0.3,0,-0.3,0.075,0.05,0.04);[-1,1].forEach(function(sd){b.ell(0.03,0.05,0.07,C,sd*0.085,-0.01,0.04);});}      // extra chest fluff and fuzzy flanks      // pale bib
   var body=b.mesh(true);torso.add(body);torso.position.set(0,0.12,-0.13);
   for(i=0;i<4;i++){
-    var lb=new Builder();lb.rod(0.03,0.026,1,C,0,-0.5,0);var lg=new T.Group();lg.add(lb.mesh(true));legs.push(lg);
+    var lb=new Builder();lb.rod(fl(0.03,0.15),fl(0.026,0.15),1,C,0,-0.5,0);var lg=new T.Group();lg.add(lb.mesh(true));legs.push(lg);
     var pb=new Builder();pb.ell(0.033,0.017,0.038,BEL,0,0.015,0.006);var pw=pb.mesh(true);pw.userData.paw=i;paws.add(pw);
   }
   var hb=new Builder();hb.ball(0.09,C,0,0,0);
   [-1,1].forEach(function(s){
-    hb.ell(0.036,0.04,0.04,C,s*0.068,-0.03,0.02);      // fluffy cheeks
+    hb.ell(fl(0.036,0.4),fl(0.04,0.3),fl(0.04,0.3),C,s*fl(0.068,0.12),-0.03,0.02);      // fluffy cheeks
+    if(F>1.3)hb.add(new T.CylinderGeometry(0.001,0.012,0.03,4),B,s*0.058,0.122,0.0,0.4*s,0);      // ear tufts
     hb.add(new T.CylinderGeometry(0.003,0.036,0.075,4),C,s*0.052,0.082,-0.008,0.4*s,0);hb.add(new T.CylinderGeometry(0.002,0.022,0.05,4),'#dcc8b2',s*0.052,0.077,0.004,0.4*s,0);
     if(coat.tabby){hb.ell(0.019,0.014,0.016,TAN,s*0.035,0.006,0.074);hb.ell(0.009,0.022,0.034,S,s*0.03,0.06,0.024);}      // tan round the eyes, side stripes of the forehead M
     hb.ball(0.013,'#2a2026',s*0.034,0.015,0.08);});
@@ -5468,16 +5497,16 @@ function buildCat(coat){
   head.add(hb.mesh(true));
   // a bushy tail along a gentle curve, ringed and dark-tipped
   var tp=[[0,0],[0.06,-0.06],[0.11,-0.11],[0.165,-0.135],[0.22,-0.145]],tb=new Builder();
-  for(i=0;i<4;i++){var r0=0.038-i*0.003,r1=r0-0.003;tb.bar(r0,r1,i===3&&coat.tabby?S:C,0,tp[i][0],tp[i][1],0,tp[i+1][0],tp[i+1][1],7);
+  for(i=0;i<4;i++){var r0=fl(0.038,0.45)-i*0.003,r1=r0-0.003;tb.bar(r0,r1,i===3&&coat.tabby?S:C,0,tp[i][0],tp[i][1],0,tp[i+1][0],tp[i+1][1],7);
     if(coat.tabby&&i<3){var mx=(tp[i][0]+tp[i+1][0])/2,mz=(tp[i][1]+tp[i+1][1])/2,dx=(tp[i+1][0]-tp[i][0])*0.12,dz=(tp[i+1][1]-tp[i][1])*0.12;tb.bar(r0+0.003,r0+0.002,S,0,mx-dx,mz-dz,0,mx+dx,mz+dz,7);}}
   tail.add(tb.mesh(true));tail.rotation.order='YXZ';
-  var hb2=new Builder();[-1,1].forEach(function(s){hb2.ell(0.044,0.058,0.088,C,s*0.064,0,0);});var haunch=hb2.mesh(true);      // folded back legs, only shown when sitting
+  var hb2=new Builder();[-1,1].forEach(function(s){hb2.ell(fl(0.044,0.2),fl(0.058,0.15),fl(0.088,0.1),C,s*fl(0.064,0.12),0,0);});var haunch=hb2.mesh(true);      // folded back legs, only shown when sitting
   var all=new T.Group();all.add(haunch);all.add(torso);legs.forEach(function(l){all.add(l);});all.add(paws);all.add(head);all.add(tail);all.scale.setScalar(1.32);g.add(all);
   g.userData={haunch:haunch,torso:torso,body:body,head:head,tail:tail,legs:legs,paws:paws};g.traverse(function(o){o.userData.cat=true;});
   return g;
 }
 function catArrives(){
-  var coat=pick(CAT_COATS);state.cat={coat:CAT_COATS.indexOf(coat),name:pick(CAT_NAMES)};
+  var coat=pick(CAT_COATS);state.cat={coat:CAT_COATS.indexOf(coat),name:coat.n};
   spawnCat(true);
   setTimeout(function(){toast('A cat has wandered in. '+state.cat.name+' seems to like it here.');},600);
   freshIds=freshIds.concat(['catbed']);renderCatalog();
@@ -5487,6 +5516,21 @@ function spawnCat(atDoor){
   var coat=CAT_COATS[state.cat.coat]||CAT_COATS[0],g=buildCat(coat),at=atDoor?{x:DOOR.x,z:DOOR.z}:catSpotAny();
   cat={g:g,x:at.x+0.5,z:(atDoor?DOOR.z+1.6:at.z+0.5),face:Math.PI,faceGoal:Math.PI,path:atDoor?[{x:DOOR.x,z:DOOR.z}]:[],state:atDoor?'walk':'idle',timer:atDoor?0:1,phase:0,pose:0,next:null};
   g.position.set(cat.x,0,cat.z);peopleRoot.add(g);
+}
+function recoatCat(i){      // the player picked a different look: rebuild the model where the cat stands
+  if(!state.cat)return;var old=state.cat.coat,oc=CAT_COATS[old];state.cat.coat=i;
+  if(oc&&state.cat.name===oc.n)state.cat.name=CAT_COATS[i].n;      // an unchanged default name follows the look
+  if(cat){var g=buildCat(CAT_COATS[i]);peopleRoot.remove(cat.g);cat.g=g;g.position.set(cat.x,0,cat.z);peopleRoot.add(g);animateCat(0,false);}
+  save();
+}
+var catPics={};
+function catPortrait(i){
+  if(catPics[i])return catPics[i];
+  var sc=new T.Scene();addLights(sc);var g=buildCat(CAT_COATS[i]),keep=cat;
+  cat={g:g,x:0,z:0,face:0.55,faceGoal:0.55,phase:0,pose:0.5,state:'sit',bed:false};animateCat(1,false);cat=keep;
+  sc.add(g);var b=new T.Box3().setFromObject(g),ctr=b.getCenter(new T.Vector3()),rad=b.getBoundingSphere(new T.Sphere()).radius*0.85;
+  var oc=new T.OrthographicCamera(-rad,rad,rad,-rad,0.1,50);oc.position.set(ctr.x+10,ctr.y+7,ctr.z+10);oc.lookAt(ctr);
+  return catPics[i]=inkThumb(sc,oc,128);
 }
 function catTiles(){var out=[];for(var z=0;z<D;z++)for(var x=0;x<W;x++)if(inShop(x,z)&&walkable(x,z)&&!(x===DOOR.x&&z===DOOR.z))out.push({x:x,z:z});return out;}
 function catSpotAny(){var t=catTiles();return t.length?pick(t):{x:DOOR.x,z:DOOR.z};}
