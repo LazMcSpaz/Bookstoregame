@@ -2205,7 +2205,19 @@ var DEFS=[
   {id:'giftmenu',name:'Dev\'s Truck Menu',tab:'Room',cost:5,level:1,cozy:5,layer:'wall',segs:1,wallY:1.25,h:0.7,band:'mid',face:'in',needGift:true,cat0:'Wall Art',
     build:function(g){var b=new Builder();b.box(0.52,0.68,0.02,'#c2573f',0,0,0.01);g.add(b.mesh(false));var p=textPlane(truckMenuTexture(),0.46,0.62);p.position.set(0,0,0.023);g.add(p);}},
   {id:'trophyshelf',name:'Trophy Shelf',tab:'Room',cost:15,level:1,cozy:4,layer:'wall',segs:2,wallY:1.45,h:0.5,band:'mid',face:'in',needMedal:true,cat0:'Wall Art',
-    build:function(g){trophyShelfModel(g);}}
+    build:function(g){trophyShelfModel(g);}},
+  {id:'orderpoint',name:'Café Order Point',tab:'Café',cost:40,level:2,cozy:1,layer:'surf',h:0.45,role:'counter',cafeOnly:true,
+    build:function(g){var b=new Builder();      // a little till for café orders only, with an ORDER HERE sign
+      b.box(0.22,0.03,0.16,'#3b2c40',-0.05,0.015,0);b.box(0.04,0.1,0.04,'#3b2c40',-0.05,0.08,-0.02);b.box(0.2,0.14,0.02,'#2d2a2e',-0.05,0.17,0.0,0,-0.35);b.box(0.17,0.11,0.005,'#7fc8d8',-0.05,0.17,0.012,0,-0.35);
+      b.box(0.02,0.3,0.02,'#5a3e28',0.17,0.15,-0.04);b.box(0.16,0.12,0.02,'#c2573f',0.17,0.33,-0.04);g.add(b.mesh(true));
+      var p=textPlane(signWords('ORDER','HERE','#c2573f'),0.15,0.11);p.position.set(0.17,0.33,-0.028);g.add(p);}},
+  {id:'pickup',name:'Pickup Spot',tab:'Café',cost:20,level:2,cozy:1,layer:'surf',h:0.3,pickup:true,
+    build:function(g,st){var b=new Builder();      // a tray and a bell: finished orders wait here
+      b.box(0.4,0.02,0.26,'#8a5a36',0,0.01,0.02);b.box(0.4,0.03,0.015,'#6a4530',0,0.03,0.15);b.box(0.4,0.03,0.015,'#6a4530',0,0.03,-0.11);
+      b.cyl(0.035,0.04,0.012,'#3b2c40',-0.15,0.026,-0.06,12);b.add(new T.SphereGeometry(0.035,12,8,0,Math.PI*2,0,Math.PI/2),'#c9a24a',-0.15,0.032,-0.06);b.cyl(0.006,0.006,0.02,'#c9a24a',-0.15,0.075,-0.06,6);
+      b.box(0.02,0.18,0.02,'#5a3e28',0.16,0.1,-0.08);b.box(0.14,0.08,0.015,'#4f9e6b',0.16,0.2,-0.08);g.add(b.mesh(true));
+      var p=textPlane(signWords('PICK','UP','#4f9e6b'),0.13,0.075);p.position.set(0.16,0.2,-0.07);g.add(p);
+      for(var k=0;k<3;k++){var cb=new Builder();cb.cyl(0.05,0.05,0.008,'#ffffff',-0.05+k*0.1,0.024,0.04,10);cb.cyl(0.032,0.026,0.05,['#f1ebe1','#9fc6c2','#f2b544'][k],-0.05+k*0.1,0.05,0.04,10);var m=cb.mesh(true);m.visible=false;g.add(m);g.userData['cup'+k]=m;}}}
 ];
 var DEF={}; DEFS.forEach(function(d){DEF[d.id]=d;});
 // which shop level unlocks what (anything not listed is there from the start)
@@ -3310,7 +3322,7 @@ function noteMissed(c){
   floater('No '+g.name,c.x,c.y+1.5,c.z,'miss');
 }
 function tryBook(c){
-  if(!byRole('counter').length){hideWant(c);return false;}
+  if(!bookTills().length){hideWant(c);return false;}
   var all=byRole('shelf').filter(function(s){return s.stock>0;}),list=all.filter(function(s){return s.genre===c.wantGenre;});
   if(!list.length){
     // their genre is out on the floor but there is some in the back and someone restocking: wait a little for it
@@ -3408,7 +3420,7 @@ function payAt(c,k){return joinQueue(c,k,function(){state.stats.books++;c.bought
 function goCounter(c){
   c.redo=function(){goCounter(c);};
   var cs=shuffle(byRole('counter')).sort(function(a,b){return a.queue.length-b.queue.length;});      // shortest line first
-  for(var i=0;i<cs.length;i++)if(payAt(c,cs[i]))return;
+  for(var i=0;i<cs.length;i++)if(!cs[i].def.cafeOnly&&payAt(c,cs[i]))return;
   if(++c.tries>10){putBack(c);nextIntent(c);return;}
   release(c);wait(c,1,function(){goCounter(c);});
 }
@@ -3424,7 +3436,7 @@ function orderAt(c,s){
 var orders=[],ORDER_WAIT=40;      // café orders taken at the register, waiting to be made and brought over
 function pendingAt(s){return orders.filter(function(o){return o.s===s&&!o.done;}).length;}
 function orderAtTill(c,s){      // queue at the register, pay there, then sit or wait nearby for it to arrive
-  var regs=byRole('counter').filter(function(k){return k.alive;}).sort(function(a,b){return a.queue.length-b.queue.length;});
+  var all=byRole('counter').filter(function(k){return k.alive;}),cafe=all.filter(function(k){return k.def.cafeOnly&&queueSlots(k).length;}),regs=(cafe.length?cafe:all).sort(function(a,b){return a.queue.length-b.queue.length;});      // café points first, if there are any
   for(var i=0;i<regs.length;i++){
     if(joinQueue(c,regs[i],function(){
       c.state='';
@@ -3432,7 +3444,8 @@ function orderAtTill(c,s){      // queue at the register, pay there, then sit or
       s.stock--;refreshStock(s);c.drank=s.def.good;var drink=!!DRINK_NAME[s.def.good];var mp=menuPick(s);
       if(state.today){state.today[drink?'coffee':'food']++;state.today.sold[mp.name]=(state.today.sold[mp.name]||0)+1;}
       state.stats[s.def.good]=(state.stats[s.def.good]||0)+1;earn(s.def.price+mp.add,c);c.did=true;mgmtDirty=true;
-      orders.push({c:c,s:s,w:null,done:false,t:simT,name:mp.name});c.awaiting=true;c.orderT=simT;
+      var pk=pickupFor(),od={c:c,s:s,w:null,done:false,t:simT,name:mp.name,pickup:pk};orders.push(od);c.awaiting=true;c.orderT=simT;
+      if(pk){waitNear(c,pk);return;}      // with a pickup spot, they wait by it and collect
       if((c.wantComfy||rnd()<0.8)&&trySeat(c))return;
       loiter(c);
     }))return true;
@@ -3455,8 +3468,27 @@ function handOver(o){      // the order arrives: a cup or a plate appears in the
 }
 function orderWork(w){      // the oldest order nobody is making yet
   orders=orders.filter(function(o){return !o.done&&o.c&&customers.includes(o.c)&&o.s.alive;});
-  var o=orders.find(function(q){return !q.w||q.w===w;});
+  var o=orders.find(function(q){return !q.ready&&(!q.w||q.w===w);});
   return o?{type:'make',item:o.s,order:o}:null;
+}
+function bookTills(){var all=byRole('counter'),b=all.filter(function(k){return !k.def.cafeOnly;});return b.length?b:[];}
+function signWords(a,b2,col){return canvasTex(160,110,function(x,w,h){x.fillStyle=col;x.fillRect(0,0,w,h);x.fillStyle='#fff5e4';x.textAlign='center';x.font='800 40px Nunito, sans-serif';x.fillText(a,w/2,48);x.fillText(b2,w/2,92);});}
+function pickupShow(pk){var n=orders.filter(function(o){return o.ready&&!o.done&&o.pickup===pk;}).length;if(pk.group)for(var k=0;k<3;k++){var m=pk.group.userData['cup'+k];if(!m)pk.group.traverse(function(o){if(o.userData['cup'+k])m=o.userData['cup'+k];});if(m)m.visible=k<n;}}
+function pickupFor(){var ps=items.filter(function(i){return i.def.pickup&&i.alive&&queueSlots(i).length;});return ps.length?pick(ps):null;}
+function waitNear(c,pk){      // hang about near the pickup spot until the order is up
+  var a=accessSets(pk),base=a[0].concat(a[1])[0]||curTile(c),spots=[];
+  for(var dz=-2;dz<=2;dz++)for(var dx=-2;dx<=2;dx++){var t={x:base.x+dx,z:base.z+dz};if((dx||dz)&&walkable(t.x,t.z)&&inShop(t.x,t.z))spots.push(t);}
+  var then=function(cc){cc.state='waitOrder';cc.timer=ORDER_WAIT;cc.after=function(q){if(q.awaiting){q.awaiting=false;q.gaveUp=true;floater('Too slow',q.x,q.y+1.5,q.z,'miss');}nextIntent(q);};};
+  if(!goTo(c,shuffle(spots).slice(0,10),then))then(c);else c.state='toWait';
+  c.redo=function(){waitNear(c,pk);};
+}
+function collect(o){      // the order is up: walk to the pickup spot and take it
+  var c=o.c,pk=o.pickup;if(!customers.includes(c)){o.done=true;pickupShow(pk);return;}
+  c.timer=0;c.after=null;c.item=null;
+  var ok=goToItem(c,pk,null,function(cc){faceItem(cc,pk);o.done=true;cc.awaiting=false;cc.p.cup.visible=true;pickupShow(pk);sfx('rustle');floater(o.name,cc.x,cc.y+1.6,cc.z,'');
+    cc.state='look';cc.timer=0.6;cc.after=function(q){if(!(rnd()<0.8&&trySeat(q)))nextIntent(q);};});
+  if(!ok){o.done=true;pickupShow(pk);handOver(o);}
+  else{c.state='toPickup';c.redo=function(){collect(o);};}
 }
 function trySnack(c){
   var bars=shuffle(byRole('snack').filter(function(s){return s.stock>0;})).sort(function(a,b){return a.queue.length-b.queue.length;});
@@ -3705,7 +3737,8 @@ function setTask(w,t){
   if(t.type==='stock')t.item.stocker=w;else t.item.worker=w;
   return true;
 }
-function deliverGo(w,t){      // walk to a tile next to the customer
+function deliverGo(w,t){      // walk to the pickup spot, or else to a tile next to the customer
+  if(t.order.pickup&&t.order.pickup.alive){var sp=staffSpots(t.order.pickup);w.doing='Taking an order to the pickup';if(workerGo(w,[sp[0],sp[1],accessSets(t.order.pickup)[0].concat(accessSets(t.order.pickup)[1])]))return true;t.order.pickup=null;}
   var c=t.order.c,ct=curTile(c),tiles=[ct].concat(DIRS.map(function(d){return {x:ct.x+d[0],z:ct.z+d[1]};})).filter(function(q){return walkable(q.x,q.z);});
   w.doing='Bringing an order';return workerGo(w,[tiles.slice(1),tiles]);
 }
@@ -3794,6 +3827,7 @@ function updateWorker(w,dt){
       if(od.done||!customers.includes(od.c)){od.done=true;setTask(w,null);}
       else if(t.phase!=='deliver'){w.state='order';w.timer+=dt;w.doing=t.item.def.good==='coffee'?'Making coffee':t.item.def.good==='tea'?'Making tea':t.item.def.good==='cold'?'Getting a drink':'Plating a pastry';
         if(w.timer>=1.8){w.timer=0;w.state='idle';t.phase='deliver';carryOrder(w,true);if(!deliverGo(w,t)){handOver(od);carryOrder(w,false);setTask(w,null);}}}
+      else if(od.pickup&&od.pickup.alive){if(!w.path.length){var pc=centerOf(od.pickup);w.faceGoal=Math.atan2(pc.x-w.x,pc.z-w.z);od.ready=true;carryOrder(w,false);pickupShow(od.pickup);sfx('pop');setTask(w,null);collect(od);}}
       else{var cc=od.c;if(Math.abs(cc.x-w.x)+Math.abs(cc.z-w.z)<=1.7){w.faceGoal=Math.atan2(cc.x-w.x,cc.z-w.z);handOver(od);carryOrder(w,false);setTask(w,null);}
         else if((t.retry=(t.retry||0)+dt)>1){t.retry=0;if(!deliverGo(w,t)){handOver(od);carryOrder(w,false);setTask(w,null);}}}
     }
@@ -4519,8 +4553,10 @@ function checkGoals(){
 function alertText(inTut){
   var idle=workers.filter(function(w){return !w.jobs.length;}),who=idle.length?(idle[0].owner?'your character':'your helper'):'a member of staff';
   if(clock-blockedExit<12)return 'Someone could not reach the door. Leave a clear path to it.';
-  var cut=stations().filter(function(i){return !queueSlots(i).length;})[0];
+  var viaTill=byRole('counter').length>0,cut=stations().filter(function(i){return i.def.role==='snack'&&viaTill?false:!queueSlots(i).length;})[0];
   if(cut)return 'Customers cannot reach the '+cut.def.name.toLowerCase()+'. Clear the floor in front of it.';
+  var cutS=viaTill&&byRole('snack').filter(function(i){var sp=staffSpots(i);return !sp[0].length&&!sp[1].length;})[0];
+  if(cutS)return 'Staff cannot reach the '+cutS.def.name.toLowerCase()+'. Leave a free tile beside it.';
   if(cutOffRoom()>=0)return buildMode?'The new room has no way in yet. Drag an Archway or a door from the Walls tab onto the low wall between the rooms.':'A room has no way in. Tap Build and add an Archway to the low wall.';
   if(inTut||buildMode)return '';
   if(lastReq&&clock-lastReq.t<90&&!items.some(function(i){return i.def.role==='shelf'&&i.genre===lastReq.g;}))return 'A customer asked for '+GENRES[lastReq.g].name+'. Order it in Stock, then give it a shelf.';
