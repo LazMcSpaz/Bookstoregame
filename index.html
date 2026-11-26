@@ -3212,7 +3212,7 @@ function arrivePlay(c){
   faceItem(c,it);c.state=it.def.role==='shelf'?'browse':'play';c.timer=5+rnd()*5;c.after=kidNext;
   if(it.def.gumball&&!c.gum){c.gum=true;c.timer=2.5;sfx('gumball');earn(1,c);}
 }
-function removeCustomer(c){if(c.reg&&!c.regDone){c.regDone=true;regLeave(c);}if(!clearingDay)review(c);if(c.kidC&&c.kidC.parent===c)c.kidC.parent=null;leaveQueue(c);release(c);freeSeat(c);peopleRoot.remove(c.p.g);var i=customers.indexOf(c);if(i>=0)customers.splice(i,1);}
+function removeCustomer(c){orders.forEach(function(o){if(o.c===c)o.done=true;});if(c.reg&&!c.regDone){c.regDone=true;regLeave(c);}if(!clearingDay)review(c);if(c.kidC&&c.kidC.parent===c)c.kidC.parent=null;leaveQueue(c);release(c);freeSeat(c);peopleRoot.remove(c.p.g);var i=customers.indexOf(c);if(i>=0)customers.splice(i,1);}
 function decide(c){
   if(c.scout!=null){      // this one walks in, asks for a genre you do not carry yet, looks around and leaves
     c.wantGenre=c.scout;showWant(c);unlockGenre(c.scout,c);
@@ -3421,11 +3421,49 @@ function orderAt(c,s){
     nextIntent(c);
   });
 }
+var orders=[],ORDER_WAIT=40;      // café orders taken at the register, waiting to be made and brought over
+function pendingAt(s){return orders.filter(function(o){return o.s===s&&!o.done;}).length;}
+function orderAtTill(c,s){      // queue at the register, pay there, then sit or wait nearby for it to arrive
+  var regs=byRole('counter').filter(function(k){return k.alive;}).sort(function(a,b){return a.queue.length-b.queue.length;});
+  for(var i=0;i<regs.length;i++){
+    if(joinQueue(c,regs[i],function(){
+      c.state='';
+      if(!s.alive||s.stock<=0){nextIntent(c);return;}
+      s.stock--;refreshStock(s);c.drank=s.def.good;var drink=!!DRINK_NAME[s.def.good];var mp=menuPick(s);
+      if(state.today){state.today[drink?'coffee':'food']++;state.today.sold[mp.name]=(state.today.sold[mp.name]||0)+1;}
+      state.stats[s.def.good]=(state.stats[s.def.good]||0)+1;earn(s.def.price+mp.add,c);c.did=true;mgmtDirty=true;
+      orders.push({c:c,s:s,w:null,done:false,t:simT,name:mp.name});c.awaiting=true;c.orderT=simT;
+      if((c.wantComfy||rnd()<0.8)&&trySeat(c))return;
+      loiter(c);
+    }))return true;
+  }
+  return false;
+}
+function loiter(c){      // no seat: stand somewhere out of the way until the order comes
+  var t0=curTile(c),spots=[];
+  for(var dz=-3;dz<=3;dz++)for(var dx=-3;dx<=3;dx++){var t={x:t0.x+dx,z:t0.z+dz},d=Math.abs(dx)+Math.abs(dz);if(d>=2&&walkable(t.x,t.z)&&inShop(t.x,t.z))spots.push(t);}
+  spots=shuffle(spots);
+  var then=function(cc){cc.state='waitOrder';cc.timer=ORDER_WAIT;cc.after=function(q){if(q.awaiting){q.awaiting=false;q.gaveUp=true;floater('Too slow',q.x,q.y+1.5,q.z,'miss');}nextIntent(q);};};
+  if(!goTo(c,spots.slice(0,10),then)){then(c);}else c.state='toWait';
+  c.redo=function(){loiter(c);};
+}
+function handOver(o){      // the order arrives: a cup or a plate appears in their hands
+  var c=o.c;o.done=true;c.awaiting=false;if(!c.p||!customers.includes(c))return;
+  c.p.cup.visible=true;sfx(o.s.def.good==='cold'?'pop':DRINK_NAME[o.s.def.good]?'hiss':'rustle');floater(o.name,c.x,c.y+1.6,c.z,'');pop(o.s.group);
+  if(c.state==='waitOrder'){c.timer=1.6;c.after=function(q){nextIntent(q);};}
+  else if(c.state==='sit')c.timer=Math.max(c.timer,4+rnd()*3);
+}
+function orderWork(w){      // the oldest order nobody is making yet
+  orders=orders.filter(function(o){return !o.done&&o.c&&customers.includes(o.c)&&o.s.alive;});
+  var o=orders.find(function(q){return !q.w||q.w===w;});
+  return o?{type:'make',item:o.s,order:o}:null;
+}
 function trySnack(c){
   var bars=shuffle(byRole('snack').filter(function(s){return s.stock>0;})).sort(function(a,b){return a.queue.length-b.queue.length;});
   if(c.wantGood){var mine=bars.filter(function(s){return s.def.good===c.wantGood;});if(mine.length)bars=mine;}
   if(miniOn('sun'))bars.sort(function(a,b){return (b.def.good==='cold')-(a.def.good==='cold');});      // hot days: the fridge first
   c.redo=function(){if(!trySnack(c))nextIntent(c);};
+  if(byRole('counter').length){bars=bars.filter(function(s){return s.stock>pendingAt(s);});if(bars.length&&orderAtTill(c,bars[0]))return true;return false;}      // with a register, café orders go through it
   for(var i=0;i<bars.length;i++)if(orderAt(c,bars[i]))return true;
   return false;
 }
@@ -3527,7 +3565,8 @@ function updateCustomer(c,dt){
     else{c.x+=dx/dist*step;c.z+=dz/dist*step;c.faceGoal=Math.atan2(dx,dz);}
   }else if(c.timer>0){
     c.timer-=dt;
-    if(c.timer<=0){a=c.after;c.after=null;if(a)a(c);}
+    if(c.timer<=0&&c.awaiting&&c.state==='sit'&&simT-c.orderT<ORDER_WAIT)c.timer=0.8;      // still waiting for their order
+    else if(c.timer<=0){a=c.after;c.after=null;if(a)a(c);}
   }else if(c.after){a=c.after;c.after=null;a(c);}
   animatePerson(c,moving,dt);
 }
@@ -3650,9 +3689,11 @@ function setTask(w,t){
   var o=w.task;
   if(o&&o.phase==='inside'){w.p.g.visible=true;}
   if(!t||t.phase!=='carry')carry(w,false);
-  if(o){if(o.item.worker===w)o.item.worker=null;if(o.item.stocker===w)o.item.stocker=null;}
+  if(!t||t.type!=='make'||t.phase!=='deliver')carryOrder(w,false);
+  if(o){if(o.item.worker===w)o.item.worker=null;if(o.item.stocker===w)o.item.stocker=null;if(o.order&&o.order.w===w&&!o.order.done&&(!t||t.order!==o.order))o.order.w=null;}
   w.task=t;w.timer=0;
   if(!t)return false;
+  if(t.type==='make'){t.order.w=w;if(t.phase==='deliver')return deliverGo(w,t);}
   var sets=staffSpots(t.item);
   if(t.type==='stock'){var a=accessSets(t.item),front=[a[0].concat(a[1])];sets=isStation(t.item)?sets.concat(front):front.concat([sets[0].concat(sets[1])]);}
   if(t.type==='stock'&&!t.phase){      // first to the back room door for a box
@@ -3663,6 +3704,14 @@ function setTask(w,t){
   if(!workerGo(w,sets)){t.item.blockT=simT+2;carry(w,false);w.task=null;return false;}
   if(t.type==='stock')t.item.stocker=w;else t.item.worker=w;
   return true;
+}
+function deliverGo(w,t){      // walk to a tile next to the customer
+  var c=t.order.c,ct=curTile(c),tiles=[ct].concat(DIRS.map(function(d){return {x:ct.x+d[0],z:ct.z+d[1]};})).filter(function(q){return walkable(q.x,q.z);});
+  w.doing='Bringing an order';return workerGo(w,[tiles.slice(1),tiles]);
+}
+function carryOrder(w,on){      // a cup on a saucer held out in front
+  if(on&&!w.tray){var b=new Builder();b.cyl(0.07,0.07,0.012,'#ffffff',0,0,0,12);b.cyl(0.04,0.032,0.06,'#f1ebe1',0,0.036,0,10);w.tray=b.mesh();w.tray.position.set(0,0.5,0.22);w.p.g.add(w.tray);}
+  else if(!on&&w.tray){w.p.g.remove(w.tray);w.tray=null;}
 }
 function blocked(it){return it.blockT>simT;}
 var BOX_GEO=null;
@@ -3698,7 +3747,7 @@ function stockWork(w){
 }
 function dutyTask(w){
   var j=w.jobs,i,t;
-  for(i=0;i<j.length;i++){t=j[i]==='till'?stationWork(w,'counter',false):j[i]==='food'?stationWork(w,'snack',false):stockWork(w);if(t)return t;}
+  for(i=0;i<j.length;i++){t=j[i]==='till'?(stationWork(w,'counter',false)||(!hasJob('food')&&orderWork(w))):j[i]==='food'?(orderWork(w)||stationWork(w,'snack',false)):stockWork(w);if(t)return t;}
   for(i=0;i<j.length;i++)if(j[i]!=='stock'){t=stationWork(w,j[i]==='till'?'counter':'snack',true);if(t)return t;}
   return null;
 }
@@ -3707,7 +3756,7 @@ function updateWorker(w,dt){
   if(w.seenVer!==layoutVersion){      // furniture moved: carry on with the same job from wherever it is now
     w.seenVer=layoutVersion;w.path=[];w.think=0;
     if(t&&t.phase==='inside'){}      // in the back room: the shop can change around them
-    else if(t&&t.item.alive)setTask(w,{type:t.type,item:t.item,phase:t.phase==='carry'?'carry':null});else setTask(w,null);
+    else if(t&&t.item.alive)setTask(w,{type:t.type,item:t.item,order:t.order,phase:t.phase==='carry'?'carry':t.type==='make'&&t.phase==='deliver'?'deliver':null});else setTask(w,null);
     t=w.task;
     if(!w.path.length){var c=curTile(w);if(!walkable(c.x,c.z)){var open=[];for(var z=0;z<D;z++)for(var x=0;x<W;x++)if(walkable(x,z))open.push({x:x,z:z});workerGo(w,[open]);}}
   }
@@ -3715,7 +3764,7 @@ function updateWorker(w,dt){
   w.think-=dt;
   if(w.think<=0){
     w.think=0.3;
-    if(!(t&&(t.type==='stock'||w.state==='order'))){      // never drop a shelf run or a sale half-way
+    if(!(t&&(t.type==='stock'||t.type==='make'||w.state==='order'))){      // never drop a shelf run or a sale half-way
       var n=dutyTask(w);
       if(!n){if(t){setTask(w,null);t=null;}}
       else if(!t||n.type!==t.type||n.item!==t.item){
@@ -3740,6 +3789,14 @@ function updateWorker(w,dt){
     w.doing=t?(t.type==='stock'?(t.phase==='carry'?'Carrying a box':'Going to the back room'):'On the way'):'Walking';
   }else if(t){
     faceItem(w,t.item);
+    if(t.type==='make'){      // at the station making it, then off to whoever ordered it
+      var od=t.order;
+      if(od.done||!customers.includes(od.c)){od.done=true;setTask(w,null);}
+      else if(t.phase!=='deliver'){w.state='order';w.timer+=dt;w.doing=t.item.def.good==='coffee'?'Making coffee':t.item.def.good==='tea'?'Making tea':t.item.def.good==='cold'?'Getting a drink':'Plating a pastry';
+        if(w.timer>=1.8){w.timer=0;w.state='idle';t.phase='deliver';carryOrder(w,true);if(!deliverGo(w,t)){handOver(od);carryOrder(w,false);setTask(w,null);}}}
+      else{var cc=od.c;if(Math.abs(cc.x-w.x)+Math.abs(cc.z-w.z)<=1.7){w.faceGoal=Math.atan2(cc.x-w.x,cc.z-w.z);handOver(od);carryOrder(w,false);setTask(w,null);}
+        else if((t.retry=(t.retry||0)+dt)>1){t.retry=0;if(!deliverGo(w,t)){handOver(od);carryOrder(w,false);setTask(w,null);}}}
+    }
     var head=t.type==='serve'?atFront(t.item):null;
     if(head&&!(t.item.def.role==='snack'&&t.item.stock<=0)){
       w.state='order';w.timer+=dt;w.doing=t.item.def.role==='counter'?'At the register':t.item.def.good==='coffee'?'Making coffee':t.item.def.good==='tea'?'Making tea':t.item.def.good==='cold'?'Handing out drinks':'Serving pastries';
@@ -3759,7 +3816,7 @@ function updateWorker(w,dt){
     }else if(t.type==='stock'){
       w.state='order';w.timer+=dt;w.doing=isStation(t.item)?'Topping up':'Shelving';
       if(w.timer>=1.0){fillFromBack(t.item);carry(w,false);w.state='idle';setTask(w,null);w.think=0;}
-    }else{w.state='idle';w.timer=0;w.doing='Minding the '+t.item.def.name.toLowerCase();}
+    }else if(t.type!=='make'){w.state='idle';w.timer=0;w.doing='Minding the '+t.item.def.name.toLowerCase();}
   }else{
     w.state='idle';
     w.doing=!w.jobs.length?'No jobs ticked':'Nothing needs doing right now';
