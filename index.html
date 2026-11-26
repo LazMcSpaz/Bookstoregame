@@ -55,6 +55,17 @@ button:focus-visible{outline:3px solid var(--honey);outline-offset:2px}
 @keyframes bump{40%{transform:scale(1.14)}}
 
 #bottom{position:absolute;left:0;right:0;bottom:0;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+#regSay{align-self:center;display:flex;gap:10px;align-items:center;background:var(--paper);color:var(--ink);border:2px solid var(--ink);border-radius:16px;padding:8px 12px 8px 8px;max-width:92%;box-shadow:0 4px 0 rgba(59,44,64,.25);opacity:0;transform:translateY(8px);transition:opacity .25s,transform .25s;pointer-events:none;margin-bottom:6px}
+#regSay.on{opacity:1;transform:none}
+#regSay img{width:44px;height:44px;border-radius:50%;background:#f6ecdc;flex:none}
+#regSay b{font-size:14px;margin-right:6px}#regSay .hearts{font-style:normal;color:#e0566e;font-size:13px;letter-spacing:1px}
+#regSay span{display:block;font-size:13.5px;line-height:1.3;font-weight:600}
+#regSay.happy{border-color:#e0566e}
+#mgmt .regrow{align-items:flex-start}
+#mgmt .regpic{width:48px;height:48px;border-radius:50%;background:#f6ecdc;flex:none}
+#mgmt .regrow .rh{font-style:normal;color:#e0566e;font-size:13px;letter-spacing:1px;margin-left:4px}
+#mgmt .regrow .rq{color:var(--ink);font-weight:700;margin-top:3px}
+#mgmt .regrow .rl{font-style:italic;margin-top:3px}
 #toast{align-self:center;background:var(--ink);color:var(--paper);padding:7px 14px;border-radius:999px;font-size:13px;opacity:0;transform:translateY(6px);transition:opacity .2s,transform .2s;max-width:86%;text-align:center}
 #toast.on{opacity:1;transform:none}
 #actions{display:none;align-self:center;gap:6px;flex-wrap:wrap;justify-content:center;padding:0 10px;pointer-events:auto;max-width:100%}
@@ -396,6 +407,7 @@ body.menu #hud,body.menu #bottom,body.menu #buildBtn,body.menu #stockBtn,body.me
   <div id="banner"><b id="bannerT"></b><span id="bannerS"></span></div>
 
   <div id="bottom">
+    <div id="regSay"><img alt=""><div><b></b><i class="hearts"></i><span></span></div></div>
     <div id="toast"></div>
     <div id="actions"></div>
     <div id="heads" role="status"></div>
@@ -445,7 +457,7 @@ body.menu #hud,body.menu #bottom,body.menu #buildBtn,body.menu #stockBtn,body.me
   </div>
   <div id="mgmt">
     <div class="sheet">
-      <div class="mtabs"><button class="tab" data-t="stock">Stock</button><button class="tab" data-t="staff">Staff</button><button class="tab" data-t="goals">Goals</button><span class="sp"></span><button class="act" id="mgmtClose">Close</button></div>
+      <div class="mtabs"><button class="tab" data-t="stock">Stock</button><button class="tab" data-t="staff">Staff</button><button class="tab" data-t="goals">Goals</button><button class="tab" data-t="regs" id="regsTab" style="display:none">Regulars</button><span class="sp"></span><button class="act" id="mgmtClose">Close</button></div>
       <div id="mgmtTut"><span id="mgmtFace"></span><div class="say"><span id="mgmtS"></span><span id="mgmtDo" class="chip2"></span></div></div>
       <div class="note" id="mgmtNote"></div>
       <div id="mgmtBody"></div>
@@ -2158,7 +2170,27 @@ var DEFS=[
   {id:'newsbox',name:'Newspaper Box',tab:'Room',cost:12,level:2,cozy:1,layer:'wall',segs:1,wallY:0,h:0.9,band:'low',face:'out',variants:2,cat0:'Walls',
     build:function(g,st,v){var z=-WALL_T-0.6,c=['#3d6b8f','#c0322e'][v],b=new Builder();[-0.12,0.12].forEach(function(x){b.box(0.04,0.3,0.04,'#3b2c40',x,0.15,z);});
       b.box(0.38,0.5,0.32,c,0,0.55,z);b.box(0.3,0.2,0.02,'#cfeaf5',0,0.62,z-0.165);b.box(0.24,0.12,0.01,'#f7f3ea',0,0.6,z-0.178);b.box(0.4,0.04,0.34,'#2d2a2e',0,0.82,z);
-      g.add(b.mesh(true));}}
+      g.add(b.mesh(true));}},
+  // ----- regulars' gifts: each appears in the catalog once that regular's story is complete -----
+  {id:'giftmanuscript',name:'Okafor\'s Mystery',tab:'Decor',cost:5,level:1,cozy:5,layer:'surf',h:0.35,needGift:true,
+    build:function(g){var b=new Builder();b.box(0.26,0.02,0.18,'#6a4530',0,0.01,0);b.box(0.24,0.2,0.02,'#6a4530',0,0.11,-0.07,0,-0.35);
+      b.box(0.2,0.025,0.14,'#f7f3ea',-0.055,0.1,-0.03,0.12,-0.35);b.box(0.2,0.025,0.14,'#f7f3ea',0.055,0.1,-0.03,-0.12,-0.35);b.box(0.012,0.03,0.15,'#8a2f2f',0,0.11,-0.03,0,-0.35);
+      b.box(0.12,0.06,0.01,'#fff5e4',0.14,0.03,0.09,-0.3);g.add(b.mesh(true));}},
+  {id:'giftgrad',name:'Theo\'s Graduation Photo',tab:'Decor',cost:5,level:1,cozy:5,layer:'surf',h:0.35,needGift:true,
+    build:function(g){var b=new Builder();b.box(0.22,0.28,0.025,'#c9a24a',-0.04,0.15,0,0,-0.15);b.box(0.18,0.24,0.01,'#9fc6d6',-0.04,0.15,0.013,0,-0.15);
+      b.ball(0.035,'#eebf9b',-0.04,0.17,0.02);b.box(0.08,0.05,0.005,'#2d2230',-0.04,0.11,0.02);b.box(0.16,0.015,0.16,'#2d2230',0.13,0.04,0.06,0.5);b.box(0.08,0.035,0.08,'#2d2230',0.13,0.02,0.06,0.5);b.bar(0.004,0.004,'#f2b544',0.13,0.05,0.06,0.2,0.0,0.1,3);g.add(b.mesh(true));}},
+  {id:'giftrose',name:'Pemberton\'s Rose',tab:'Decor',cost:5,level:1,cozy:5,layer:'solid',w:1,d:1,h:0.9,needGift:true,cat0:'Plants',
+    build:function(g){var b=new Builder(),r=mulberry(21);b.cyl(0.18,0.14,0.26,'#5b6b73',0,0.13,0,12);b.cyl(0.16,0.16,0.03,'#4a3526',0,0.25,0,12);
+      for(var i=0;i<9;i++){var x=(r()-0.5)*0.3,z=(r()-0.5)*0.3,y=0.45+r()*0.35;b.bar(0.008,0.008,'#3f7a3a',x*0.3,0.26,z*0.3,x,y,z,3);b.ico(0.05,'#4f8a43',x+0.04,y-0.08,z);b.ball(0.055,i%3?'#c0322e':'#e0566e',x,y+0.03,z);}
+      g.add(b.mesh(true));}},
+  {id:'giftbunny',name:'Rosa\'s Crochet Bunny',tab:'Kids',cost:5,level:1,cozy:5,layer:'surf',h:0.3,needGift:true,
+    build:function(g){var b=new Builder(),c='#f3d6e4';b.ell(0.08,0.09,0.07,c,0,0.09,0);b.ball(0.06,c,0,0.2,0.01);b.ell(0.02,0.07,0.012,c,-0.025,0.3,0);b.ell(0.02,0.07,0.012,c,0.025,0.3,0);
+      b.ball(0.01,'#2d2230',-0.02,0.21,0.06);b.ball(0.01,'#2d2230',0.02,0.21,0.06);b.ball(0.012,'#e0566e',0,0.195,0.065);b.ball(0.03,'#ffffff',0,0.07,-0.07);b.ell(0.03,0.02,0.04,c,-0.05,0.02,0.05);b.ell(0.03,0.02,0.04,c,0.05,0.02,0.05);
+      g.add(b.mesh(true));}},
+  {id:'giftsketch',name:'Juniper\'s Sketch',tab:'Room',cost:5,level:1,cozy:5,layer:'wall',segs:1,wallY:1.25,h:0.6,band:'mid',face:'in',needGift:true,cat0:'Wall Art',
+    build:function(g){var b=new Builder();b.box(0.72,0.56,0.03,'#3b2c40',0,0,0.015);g.add(b.mesh(false));var p=textPlane(sketchTexture(),0.62,0.46);p.position.set(0,0,0.033);g.add(p);}},
+  {id:'giftmenu',name:'Dev\'s Truck Menu',tab:'Room',cost:5,level:1,cozy:5,layer:'wall',segs:1,wallY:1.25,h:0.7,band:'mid',face:'in',needGift:true,cat0:'Wall Art',
+    build:function(g){var b=new Builder();b.box(0.52,0.68,0.02,'#c2573f',0,0,0.01);g.add(b.mesh(false));var p=textPlane(truckMenuTexture(),0.46,0.62);p.position.set(0,0,0.023);g.add(p);}}
 ];
 var DEF={}; DEFS.forEach(function(d){DEF[d.id]=d;});
 // which shop level unlocks what (anything not listed is there from the start)
@@ -2203,7 +2235,7 @@ DEFS.forEach(function(d){d.cat=catOf(d);});
 var CAT_FIRST={Shelves:['shelf','lowshelf','bookdisplay','bookcart','tallcase'],Counters:['counter','register','drawer','espresso','croissants','cake','donuts'],Walls:['archway','frenchdoors','slidingdoor','patiodoor','halfwall','window','widewindow','picwin','bigpicwin','awning','wideawning','flowerbox','signboard','bladesign','lettersign']};
 function catalogList(cat){
   var first=CAT_FIRST[cat]||[];
-  return DEFS.filter(function(d){return !d.hidden&&d.cat===cat&&(!d.needCat||state.cat)&&(!d.needEvent||state.event)&&styleOpen(d.style||'Classic');})
+  return DEFS.filter(function(d){return !d.hidden&&d.cat===cat&&(!d.needCat||state.cat)&&(!d.needGift||regGiftDone(d.id))&&(!d.needEvent||state.event)&&styleOpen(d.style||'Classic');})
     .sort(function(a,b){var fa=first.indexOf(a.id),fb=first.indexOf(b.id);if(fa>=0||fb>=0)return (fa<0?99:fa)-(fb<0?99:fb);
       return STYLE_SETS.indexOf(a.style)-STYLE_SETS.indexOf(b.style)||(a.level||1)-(b.level||1)||a.cost-b.cost;});
 }
@@ -3121,8 +3153,8 @@ function goToItem(c,it,seat,after){
   var sets=accessSets(it,seat);
   return goTo(c,sets[0],after)||goTo(c,sets[1],after);
 }
-function spawnCustomer(){
-  var p=buildPerson({neck:rnd()<0.22?'scarf':''});
+function spawnCustomer(look){
+  var p=buildPerson(look||{neck:rnd()<0.22?'scarf':''});
   var c={id:nextId++,p:p,wantGenre:null,waitT:0,x:DOOR.x+0.5,y:0,z:DOOR.z+2.7,face:Math.PI,faceGoal:Math.PI,speed:1.45+rnd()*0.4,phase:rnd()*6,
     path:[{x:DOOR.x,z:DOOR.z}],after:decide,state:'enter',timer:0,plan:[],item:null,itemVer:0,seat:null,seatIdx:0,resKey:null,
     tries:0,did:false,seenVer:layoutVersion,redo:null,hop:null};
@@ -3165,13 +3197,14 @@ function arrivePlay(c){
   faceItem(c,it);c.state=it.def.role==='shelf'?'browse':'play';c.timer=5+rnd()*5;c.after=kidNext;
   if(it.def.gumball&&!c.gum){c.gum=true;c.timer=2.5;sfx('gumball');earn(1,c);}
 }
-function removeCustomer(c){if(!clearingDay)review(c);if(c.kidC&&c.kidC.parent===c)c.kidC.parent=null;leaveQueue(c);release(c);freeSeat(c);peopleRoot.remove(c.p.g);var i=customers.indexOf(c);if(i>=0)customers.splice(i,1);}
+function removeCustomer(c){if(c.reg&&!c.regDone){c.regDone=true;regLeave(c);}if(!clearingDay)review(c);if(c.kidC&&c.kidC.parent===c)c.kidC.parent=null;leaveQueue(c);release(c);freeSeat(c);peopleRoot.remove(c.p.g);var i=customers.indexOf(c);if(i>=0)customers.splice(i,1);}
 function decide(c){
   if(c.scout!=null){      // this one walks in, asks for a genre you do not carry yet, looks around and leaves
     c.wantGenre=c.scout;showWant(c);unlockGenre(c.scout,c);
     if(!tryWander(c))leave(c);
     return;
   }
+  if(c.reg){regDecide(c);return;}
   if(c.fan){evFanDecide(c);return;}
   if(bargainWant(c)){nextIntent(c);return;}
   if(miniPlan(c)){if(c.plan.indexOf('book')>=0){c.wantGenre=pickGenre();showWant(c);}nextIntent(c);return;}
@@ -3190,6 +3223,7 @@ function nextIntent(c){
     var want=c.plan.shift();
     if(want==='book'&&tryBook(c))return;
     if(want==='snack'&&trySnack(c))return;
+    if(want==='seat'&&trySeat(c))return;
   }
   if(!c.did&&!c.wandered&&tryWander(c))return;
   leave(c);
@@ -3366,13 +3400,14 @@ function orderAt(c,s){
   return joinQueue(c,s,function(){
     c.state='';
     if(!s.alive||s.stock<=0){nextIntent(c);return;}
-    s.stock--;refreshStock(s);var drink=!!DRINK_NAME[s.def.good];sfx(s.def.good==='cold'?'pop':drink?'hiss':'rustle');if(state.today){var fn=DRINK_NAME[s.def.good]||s.def.name;state.today[drink?'coffee':'food']++;state.today.sold[fn]=(state.today.sold[fn]||0)+1;}state.stats[s.def.good]=(state.stats[s.def.good]||0)+1;earn(s.def.price,c);c.did=true;c.p.cup.visible=true;pop(s.group);mgmtDirty=true;
-    if(rnd()<0.8&&trySeat(c))return;
+    s.stock--;refreshStock(s);c.drank=s.def.good;var drink=!!DRINK_NAME[s.def.good];sfx(s.def.good==='cold'?'pop':drink?'hiss':'rustle');if(state.today){var fn=DRINK_NAME[s.def.good]||s.def.name;state.today[drink?'coffee':'food']++;state.today.sold[fn]=(state.today.sold[fn]||0)+1;}state.stats[s.def.good]=(state.stats[s.def.good]||0)+1;earn(s.def.price,c);c.did=true;c.p.cup.visible=true;pop(s.group);mgmtDirty=true;
+    if((c.wantComfy||rnd()<0.8)&&trySeat(c))return;
     nextIntent(c);
   });
 }
 function trySnack(c){
   var bars=shuffle(byRole('snack').filter(function(s){return s.stock>0;})).sort(function(a,b){return a.queue.length-b.queue.length;});
+  if(c.wantGood){var mine=bars.filter(function(s){return s.def.good===c.wantGood;});if(mine.length)bars=mine;}
   if(miniOn('sun'))bars.sort(function(a,b){return (b.def.good==='cold')-(a.def.good==='cold');});      // hot days: the fridge first
   c.redo=function(){if(!trySnack(c))nextIntent(c);};
   for(var i=0;i<bars.length;i++)if(orderAt(c,bars[i]))return true;
@@ -3382,6 +3417,7 @@ function trySeat(c){
   var spots=[];
   byRole('seat').forEach(function(s){for(var i=0;i<s.def.seats;i++)if(!s.seatRes[i])spots.push([s,i]);});
   spots=shuffle(spots);
+  if(c.wantComfy){var comfy=spots.filter(function(q){return q[0].def.cozy>=3;});if(comfy.length)spots=comfy;}
   for(var i=0;i<spots.length;i++){
     var s=spots[i][0],idx=spots[i][1];
     if(goToItem(c,s,idx,arriveSeat)){
@@ -3405,7 +3441,7 @@ function arriveSeat(c){
   c.state='hopOn';c.hop={fx:c.x,fy:0,fz:c.z,tx:to.x,ty:to.y,tz:to.z,t:0};
   var f=frontOf(s.rot);c.faceGoal=Math.atan2(f.dx,f.dz);
   c.after=function(){
-    c.state='sit';c.timer=5+rnd()*3.5;if(!c.kid&&s&&nearChess(s)){c.timer*=1.8;c.chess=true;}
+    c.state='sit';c.timer=5+rnd()*3.5;c.satCozy=Math.max(c.satCozy||0,s?s.def.cozy:0);if(!c.kid&&s&&nearChess(s)){c.timer*=1.8;c.chess=true;}
     c.after=function(){
       state.stats.seated++;earn(s.def.tip+(nearTable(s,c.seatIdx)?2:0),c);
       var sx=Math.floor(c.stand.x),sz=Math.floor(c.stand.z),own=tileRes.get(sx+','+sz);
@@ -3533,7 +3569,7 @@ function simulate(dt){
   }
   for(var i=customers.length-1;i>=0;i--)updateCustomer(customers[i],dt);
   for(i=0;i<workers.length;i++)updateWorker(workers[i],dt);
-  stepTrend(dt);stepDay(dt);updateCat(dt);miniTick();updateRain(dt);updateFrontDoors(dt);updateInnerDoors(dt);
+  stepTrend(dt);stepDay(dt);updateCat(dt);miniTick();regTick();updateRain(dt);updateFrontDoors(dt);updateInnerDoors(dt);
 }
 function ratingPace(){return state.rating==null?1:clamp(1.15-0.075*(state.rating-2),0.88,1.15);}      // a well-reviewed shop gets visitors a little more often
 
@@ -4212,6 +4248,7 @@ function tap(cx,cy){
   var b=!selWorker&&bubbleAt(cx,cy);if(b){openMgmt('stock');return;}      // with someone picked, a tap on a shelf is their job, not the alert bubble
   var it=hitItem(cx,cy),itD=it?lastHitDist:1e9;
   if(buildMode){select(it||null);return;}
+  var rg=hitRegular(cx,cy);if(rg&&!hitWorker(cx,cy)){regTapped(rg);return;}
   if(cat&&hitCat(cx,cy)&&!(hitWorker(cx,cy))){petCat(true);return;}
   var hw=hitWorker(cx,cy),person=hw&&hw.d<itD?hw.w:null;
   if(!person&&!it)person=nearWorker(cx,cy,26);
@@ -5097,7 +5134,7 @@ function renderMgmt0(){
   mgmtDirty=false;
   var tabs=document.querySelectorAll('#mgmt .mtabs .tab');
   for(var i=0;i<tabs.length;i++)tabs[i].classList.toggle('on',tabs[i].dataset.t===mgmtTab||((mgmtTab==='look'||mgmtTab==='jobs')&&tabs[i].dataset.t==='staff'));
-  var body=$('mgmtBody');body.innerHTML='';
+  var body=$('mgmtBody');body.innerHTML='';$('regsTab').style.display=regMetAny()?'':'none';
   function row(html,cls){var d=document.createElement('div');d.className='srow'+(cls?' '+cls:'');d.innerHTML=html;body.appendChild(d);return d;}
   function buyBtn(d,k,unit,pack){
     var done=lastBuy.k===k&&!lastBuy.bad&&Date.now()-lastBuy.t<800;      // the button itself says "got it" for a moment
@@ -5117,6 +5154,7 @@ function renderMgmt0(){
     d.dataset.k=k;buyBtn(d,k,unit,pack);
   }
   $('mgmtNote').classList.remove('warn');
+  if(mgmtTab==='regs'){renderRegulars(row,$('mgmtNote'));return;}
   if(mgmtTab==='goals'){
     $('mgmtNote').textContent='Finish goals for coins. Sales and furniture raise your shop level, which unlocks new pieces, genres and hires.';
     if(state.goal<TUT_N){
@@ -5300,6 +5338,7 @@ function load(){
     var ev=d.s.event;
     state.event=ev&&typeof ev==='object'&&TITLES[ev.t|0]?{t:ev.t|0,release:ev.release|0,pre:Math.max(0,ev.pre|0),cap:Math.max(1,ev.cap|0),sold:ev.sold|0,missed:ev.missed|0,rush:Math.max(0,ev.rush|0),fresh:!!ev.fresh}:null;
     state.nextEvent=typeof d.s.nextEvent==='number'?d.s.nextEvent:null;state.titlesSeen=Array.isArray(d.s.titlesSeen)?d.s.titlesSeen.filter(function(i){return TITLES[i];}):[];
+    var rgs=d.s.regs;state.regs={};if(rgs&&typeof rgs==='object')REGS.forEach(function(r){var q=rgs[r.id];if(q&&typeof q==='object')state.regs[r.id]={met:!!q.met,hearts:Math.max(0,Math.min(REG_HEARTS,q.hearts|0)),line:typeof q.line==='string'?q.line.slice(0,200):''};});
     var mn=d.s.mini;state.mini=mn&&typeof mn==='object'&&MINIS.some(function(q){return q.id===mn.id;})?mn:null;state.miniRecent=Array.isArray(d.s.miniRecent)?d.s.miniRecent.slice(-4):[];
     applyFeature();
     level=levelFor(xpTotal());
@@ -5710,7 +5749,7 @@ function showDaySheet(){
   var top=bestOf(t.sold);if(top)row('★','#e0a020','Best seller: <b>'+top[0]+'</b><small>'+top[1]+' sold today</small>');
   var miss=bestOf(t.missed);if(miss)row('!','#d77a6a','<b>'+miss[0]+'</b> was asked for '+miss[1]+(miss[1]===1?' time':' times')+'<small>Nobody found any. Stocking it brings those sales back.</small>','warn');
   if(t.pets){var coat=state.cat&&CAT_COATS[state.cat.coat]||CAT_COATS[0];row('<svg viewBox="0 0 24 24" width="17" height="17"><g fill="#fff"><ellipse cx="12" cy="15.5" rx="4.6" ry="3.8"/><circle cx="6.3" cy="10.5" r="2"/><circle cx="9.6" cy="7.2" r="2"/><circle cx="14.4" cy="7.2" r="2"/><circle cx="17.7" cy="10.5" r="2"/></g></svg>',coat.n==='Patches'?'#c9a27e':coat.c,'<b>'+(state.cat?state.cat.name:'The cat')+'</b> got '+t.pets+(t.pets===1?' pat':' pats')+'<small>'+(t.pets>=15?'The most loved cat on the street.':t.pets>=5?'Customers keep stopping to say hello.':'A quiet day of naps.')+'</small>');}
-  miniSheet(row);evSheet(row);
+  miniSheet(row);regSheet(row);evSheet(row);
   if(t.notes.length){
     var h=document.createElement('h3');h.textContent='What customers said';el.appendChild(stag(h));
     var ns=t.notes.slice().sort(function(a,b){return b.s-a.s;}),show=[ns[0]];
@@ -5731,7 +5770,7 @@ function nextDay(){
   clearingDay=true;customers.slice().forEach(function(c){removeCustomer(c);});clearingDay=false;
   workers.forEach(function(w){w.task=null;});
   if(!state.cat&&state.day>=CAT_DAY)catArrives();
-  evDayStart();miniDayStart();if(state.day%3===0)refreshCork();
+  evDayStart();miniDayStart();regDayStart();if(state.day%3===0)refreshCork();
   save();updateClock(true);
 }
 var clockShown='';
@@ -5920,7 +5959,7 @@ function petCat(byPlayer){
 // customers who walk past stop to say hello
 function catVisit(c){
   if(!cat||c.petted||cat.state==='walk'||c.scout!=null)return false;
-  if(Math.hypot(c.x-cat.x,c.z-cat.z)>4.5||rnd()>miniPetChance(c))return false;
+  if(!c.wantCat&&(Math.hypot(c.x-cat.x,c.z-cat.z)>4.5||rnd()>miniPetChance(c)))return false;
   var ct={x:Math.floor(cat.x),z:Math.floor(cat.z)},spots=DIRS.map(function(d){return {x:ct.x+d[0],z:ct.z+d[1]};}).filter(function(t){return walkable(t.x,t.z)&&!edgeBetween(ct.x,ct.z,t.x,t.z);});
   if(!spots.length)return false;
   c.item=null;c.redo=function(){nextIntent(c);};
@@ -6402,7 +6441,193 @@ function bargainWant(c){
   c.plan=byRole('snack').length&&rnd()<0.3?['book','snack']:['book'];c.wantGenre=BARGAIN_G;showWant(c);return true;
 }
 
-window.__shop={miniStart:function(id){var d=MINIS.find(function(q){return q.id===id;});state.mini={id:id,day:state.day,note:d.note};dayLook=null;},evAnnounce:function(){state.nextEvent=0;evMaybeAnnounce();},evDayStart:function(){evDayStart();},FEAT_G:function(){return FEAT_G;},TITLES:TITLES,setOutside:function(o){setOutside(o);},outside:function(){return outsideView;},renameShop:function(n){renameShop(n);},dayOn:function(){return dayOn();},endDay:function(){endDay();},nextDay:function(){nextDay();},catArrives:function(){catArrives();},cat:function(){return cat;},petCat:function(){petCat(true);},hitCat:function(x,y){return hitCat(x,y);},peek:function(src){return eval(src);},renderAudio:function(a,b,c){return renderAudio(a,b,c);},shopStyle:function(){return shopStyle();},audio:AU,sfx:function(n){sfx(n);},lowWallNudge:function(a,b,c,d){return lowWallNudge(a,b,c,d);},edgeBetween:function(a,b,c,d){return edgeBetween(a,b,c,d);},roomAt:function(x,z){return roomAt(x,z);},setKidChance:function(v){KID_CHANCE=v;},spawnKid:function(c){return spawnKid(c);},state:state,items:items,customers:customers,addItem:addItem,simulate:simulate,cam:cam,turn:turn,walls:walls,
+/* ---------- regulars: six named customers who keep coming back. Each visit they ask for one thing; give it to them
+   and their friendship grows by a heart and their little story moves on. At five hearts they bring a gift. ---------- */
+var REGS=[
+  {id:'okafor',name:'Mrs. Okafor',fav:'mystery',bio:'Retired teacher. Reads only murders.',
+    look:{skin:'#8d5a3c',hair:'#d7d2cc',style:'bun',top:'#7a6bb5',bottom:'#3b4a6b',shoe:'#3b2c40',dress:true,glasses:true,beard:false,neck:'scarf',apronColor:'#f2b544',hat:'#7a6bb5'},
+    when:function(){return state.day>=4;},gift:'giftmanuscript',
+    steps:[{r:{t:'book',g:'mystery'},ask:'Something with a body in the library, dear.',done:'Ooh, the vicar did it. I can tell already.'},
+      {r:{t:'drink',d:'tea'},ask:'Any chance of a pot of tea?',done:'Proper tea. You may stay open.'},
+      {r:{t:'seat'},ask:'I need a comfy chair to finish chapter nine.',done:'The vicar did NOT do it. I am furious. I love it.'},
+      {r:{t:'book',g:'mystery'},ask:'I have started writing my own mystery. Research purposes.',done:'Page forty. Someone has been poisoned with a scone.'},
+      {r:{t:'cat'},ask:'My detective needs a cat. May I study yours?',done:'Finished! The cat solves it. A signed copy, for your shelf.'}]},
+  {id:'theo',name:'Theo',fav:'fantasy',bio:'Student. Mostly running on coffee.',
+    look:{skin:'#eebf9b',hair:'#5a3a25',style:'curly',top:'#3d8f8a',bottom:'#6b7a8f',shoe:'#f1ebe1',dress:false,glasses:true,beard:false,neck:'',hat:'#3d8f8a'},
+    when:function(){return state.day>=5;},gift:'giftgrad',
+    steps:[{r:{t:'book',g:'fantasy'},ask:'Exams in a week. Obviously I need a dragon book.',done:'Chapter one has three dragons. Studying can wait.'},
+      {r:{t:'drink',d:'coffee'},ask:'Coffee. Large. Pray for me.',done:'I can see colours again. Thank you.'},
+      {r:{t:'seat'},ask:'Can I study here? I promise to be quiet.',done:'Revised two chapters. Read one dragon book. Balance.'},
+      {r:{t:'book',g:'fantasy'},ask:'Last exam done! Reward book, please.',done:'I am going to read this in one sitting and nobody can stop me.'},
+      {r:{t:'cat'},ask:'I PASSED. I need to tell your cat first.',done:'Graduation photo. You were basically my library. Keep it.'}]},
+  {id:'pemberton',name:'Mr. Pemberton',fav:'romance',bio:'Grumpy. Allegedly.',
+    look:{skin:'#f6d2b8',hair:'#d7d2cc',style:'buzz',top:'#5a4a3a',bottom:'#2d2230',shoe:'#6b4226',dress:false,glasses:false,beard:true,neck:'',hat:'#5a4a3a'},
+    when:function(){return state.day>=6;},gift:'giftrose',
+    steps:[{r:{t:'drink',d:'coffee'},ask:'Coffee. Black. No talking.',done:'...Adequate.'},
+      {r:{t:'book',g:'romance'},ask:'Romance section. It is for my sister.',done:'She will... she will probably like it.'},
+      {r:{t:'seat'},ask:'Just resting my knees. Somewhere soft.',done:'Fine. This chair is fine. Tell no one.'},
+      {r:{t:'book',g:'romance'},ask:'My "sister" finished it. She would like the sequel.',done:'Alright, it is for me. The duke is a fool and I adore him.'},
+      {r:{t:'cat'},ask:'Is that cat free? Not for sale. Free to pet.',done:'A rose from my garden. Do not make it weird.'}]},
+  {id:'rosa',name:'Rosa',fav:'kids',bio:'New mum. Very tired. Very nice.',
+    look:{skin:'#d9a17a',hair:'#2d2230',style:'pony',top:'#d96c8f',bottom:'#3b4a6b',shoe:'#3b2c40',dress:false,glasses:false,beard:false,neck:'',hat:'#d96c8f'},
+    when:function(){return state.day>=5&&state.genres.indexOf(KIDS_G)>=0;},gift:'giftbunny',kid:true,
+    steps:[{r:{t:'book',g:'kids'},ask:'Something with a badger in it. She is obsessed.',done:'She hugged the book. She is hugging the book.'},
+      {r:{t:'drink',d:'tea'},ask:'If I do not get a tea I will fall asleep standing up.',done:'I can feel my face again.'},
+      {r:{t:'seat'},ask:'Five minutes. Just five minutes sitting down.',done:'That was the best five minutes of my month.'},
+      {r:{t:'book',g:'kids'},ask:'She wants the badger book again. And again. And again.',done:'New badger. Fresh badger. Thank you.'},
+      {r:{t:'cat'},ask:'She says your cat is the best cat in the world.',done:'She made this for your shop. It is a bunny. Mostly.'}]},
+  {id:'juniper',name:'Juniper',fav:'scifi',bio:'Artist. Sketches everything.',
+    look:{skin:'#b97f5a',hair:'#3fa7a3',style:'bob',top:'#f2b544',bottom:'#4f6d5a',shoe:'#c2573f',dress:true,glasses:false,beard:false,neck:'',hat:'#f2b544'},
+    when:function(){return state.day>=8&&state.genres.indexOf(3)>=0;},gift:'giftsketch',
+    steps:[{r:{t:'seat'},ask:'Mind if I sketch? Your shop has lovely light.',done:'The light hits the shelves just right at this hour.'},
+      {r:{t:'drink',d:'coffee'},ask:'Coffee keeps the lines steady.',done:'Steady hands. Mostly.'},
+      {r:{t:'book',g:'scifi'},ask:'Something with robots. For reference. Mostly.',done:'Robot drawn. Robot named Gerald.'},
+      {r:{t:'seat'},ask:'Back to finish the sketch. Same chair?',done:'Nearly done. It just needs one more thing.'},
+      {r:{t:'cat'},ask:'The sketch needs a cat. Can I borrow yours for a minute?',done:'Finished! It is your shop. Hang it somewhere.'}]},
+  {id:'dev',name:'Dev',fav:'cooking',bio:'Chef. Opening a food truck.',
+    look:{skin:'#8d5a3c',hair:'#2d2230',style:'short',top:'#f1ebe1',bottom:'#2d2230',shoe:'#3b2c40',dress:false,glasses:false,beard:true,neck:'apron',apronColor:'#c2573f',hat:'#f1ebe1'},
+    when:function(){return state.day>=6&&state.genres.indexOf(5)>=0;},gift:'giftmenu',
+    steps:[{r:{t:'book',g:'cooking'},ask:'Need ideas. My food truck opens next month.',done:'Toast. A whole truck of toast. No? Maybe.'},
+      {r:{t:'drink',d:'tea'},ask:'Tea tasting. Professional reasons.',done:'Notes: bright, malty, would pair with a scone.'},
+      {r:{t:'book',g:'cooking'},ask:'Is soup just wet salad? I need a second opinion.',done:'It is not. I have been told. Firmly.'},
+      {r:{t:'seat'},ask:'Writing my menu. I need somewhere quiet to sit.',done:'Menu done. It is ninety percent soup.'},
+      {r:{t:'drink',d:'coffee'},ask:'Opening day tomorrow! One last coffee.',done:'Come by the truck! Here, a menu for your wall.'}]}];
+var REG_HEARTS=5;
+function regOf(id){return REGS.find(function(r){return r.id===id;});}
+function regState(id){state.regs=state.regs||{};return state.regs[id]||(state.regs[id]={met:false,hearts:0,line:''});}
+function regDone(id){var s=state.regs&&state.regs[id];return !!s&&s.hearts>=REG_HEARTS;}
+function regMetAny(){return !!state.regs&&REGS.some(function(r){return state.regs[r.id]&&state.regs[r.id].met;});}
+function regGiftDone(gid){return REGS.some(function(r){return r.gift===gid&&regDone(r.id);});}
+function regStep(r){var s=regState(r.id);return r.steps[Math.min(s.hearts,r.steps.length-1)];}
+// can the shop give them what they are asking for right now? if not, say what is missing
+function regNeed(req){
+  if(req.t==='book')return state.genres.indexOf(GENRES.findIndex(function(g){return g.id===req.g;}))>=0?'':'the '+GENRES.find(function(g){return g.id===req.g;}).name+' genre';
+  if(req.t==='drink'){var has=items.some(function(i){return i.def.good===req.d;});return has?'':req.d==='tea'?'a Tea Station':req.d==='cold'?'a Cold Drinks Fridge':'a Coffee Machine';}
+  if(req.t==='seat')return byRole('seat').some(function(s){return s.def.cozy>=3;})?'':'a comfy seat (an armchair, sofa or similar)';
+  if(req.t==='cat')return state.cat?'':'a shop cat';
+  return '';
+}
+function regReqText(req){
+  if(req.t==='book')return 'a '+GENRES.find(function(g){return g.id===req.g;}).name+' book';
+  if(req.t==='drink')return req.d==='tea'?'a tea':req.d==='cold'?'a cold drink':'a coffee';
+  if(req.t==='seat')return 'a comfy seat';
+  if(req.t==='cat')return 'time with the cat';
+  return '';
+}
+// each morning: who drops in today, and when
+function regDayStart(){
+  state.regPlan=[];if(state.goal<TUT_N)return;
+  var open=REGS.filter(function(r){return r.when()&&state.genres.indexOf(GENRES.findIndex(function(g){return g.id===r.fav;}))>=0;}),fresh=open.filter(function(r){return !regState(r.id).met;}),known=open.filter(function(r){var s=regState(r.id);return s.met&&s.hearts<REG_HEARTS;}),done=open.filter(function(r){return regDone(r.id);});
+  var who=[];
+  if(fresh.length&&rnd()<0.75)who.push(fresh[0]);
+  shuffle(known).slice(0,2).forEach(function(r){if(rnd()<0.75)who.push(r);});
+  if(done.length&&rnd()<0.25)who.push(pick(done));
+  who.slice(0,3).forEach(function(r,i){state.regPlan.push({id:r.id,h:10+i*2+rnd()*1.5,in:false});});
+}
+function regTick(){
+  if(!dayOn()||shopClosed()||!state.regPlan)return;var h=hourNow();
+  state.regPlan.forEach(function(p){if(!p.in&&h>=p.h){p.in=true;regArrive(p.id);}});
+}
+function regArrive(id){
+  var r=regOf(id),s=regState(id),c=spawnCustomer(r.look),first=!s.met;
+  c.reg=id;c.req=s.hearts<REG_HEARTS?regStep(r).r:{t:'book',g:r.fav};c.regNeed=regNeed(c.req);
+  if(r.kid&&kidSpots().length)spawnKid(c);
+  regTag(c,r);
+  if(first){s.met=true;state.regsMet=(state.regsMet||0)+1;}
+  var say=first?'Hello! I am '+r.name+'. '+r.bio:s.hearts>=REG_HEARTS?'Just popping in. Hello, you.':regStep(r).ask;
+  if(first&&s.hearts<REG_HEARTS)say+=' '+regStep(r).ask;
+  regSay(r,say+(c.regNeed?' (Needs '+c.regNeed+'.)':''));
+  if(first)setTimeout(function(){toast('New regular: '+r.name+'. Find them in Stock → Regulars.');},1800);
+  mgmtDirty=true;
+}
+function regTag(c,r){      // a little name label over their head, so you can spot them
+  var cv=document.createElement('canvas');cv.width=256;cv.height=64;var x=cv.getContext('2d');
+  x.font='800 30px Nunito, sans-serif';var w=Math.min(250,x.measureText('♥ '+r.name).width+28);
+  x.fillStyle='rgba(59,44,64,.88)';x.beginPath();if(x.roundRect)x.roundRect((256-w)/2,10,w,44,22);else x.rect((256-w)/2,10,w,44);x.fill();
+  x.fillStyle='#fff5e4';x.textAlign='center';x.textBaseline='middle';x.fillText(r.name,128+10,33);x.fillStyle='#f0738a';x.fillText('♥',128-w/2+22,33);
+  var sp=new T.Sprite(new T.SpriteMaterial({map:new T.CanvasTexture(cv),depthTest:false,transparent:true}));sp.scale.set(1.5,0.375,1);sp.position.set(0,2.0,0);sp.renderOrder=9;sp.layers.set(2);c.p.g.add(sp);c.tag=sp;
+}
+function regDecide(c){      // what the request makes them do
+  var q=c.req;c.plan=[];
+  if(c.regNeed){c.plan=['book'];c.wantGenre=GENRES.findIndex(function(g){return g.id===regOf(c.reg).fav;});if(state.genres.indexOf(c.wantGenre)<0)c.wantGenre=pickGenre();showWant(c);nextIntent(c);return;}
+  if(q.t==='book'){c.wantGenre=GENRES.findIndex(function(g){return g.id===q.g;});c.plan=['book'];showWant(c);}
+  else if(q.t==='drink'){c.wantGood=q.d;c.plan=['snack'];}
+  else if(q.t==='seat'){c.wantComfy=true;c.plan=byRole('snack').length?['snack','seat']:['seat'];}
+  else if(q.t==='cat'){c.wantCat=true;c.plan=['book'];c.wantGenre=GENRES.findIndex(function(g){return g.id===regOf(c.reg).fav;});if(state.genres.indexOf(c.wantGenre)<0)c.wantGenre=pickGenre();showWant(c);}
+  nextIntent(c);
+}
+function regMet(c){
+  var q=c.req;if(c.regNeed)return false;
+  if(q.t==='book')return !!c.boughtBook&&GENRES[c.bookGenre]&&GENRES[c.bookGenre].id===q.g;
+  if(q.t==='drink')return c.drank===q.d;
+  if(q.t==='seat')return (c.satCozy||0)>=3;
+  if(q.t==='cat')return !!c.petted;
+  return false;
+}
+function regLeave(c){
+  var r=regOf(c.reg),s=regState(c.reg);if(!r)return;
+  state.today=state.today||freshToday();state.today.regs=state.today.regs||[];
+  if(s.hearts>=REG_HEARTS){state.today.regs.push({id:r.id,ok:true,visit:true,h:s.hearts});return;}
+  var ok=regMet(c),step=regStep(r);
+  if(ok){s.hearts++;s.line=step.done;var tip=5+5*s.hearts;state.coins+=tip;if(state.today)state.today.coins+=tip;updateHUD();
+    regSay(r,step.done+'  +'+tip+' coins',true);sfx('goal');
+    if(s.hearts>=REG_HEARTS){freshIds=freshIds.concat([r.gift]);setTimeout(function(){toast(r.name+' left you a gift: '+DEF[r.gift].name+'. It is in the catalog.');sfx('levelup');},2600);}}
+  state.today.regs.push({id:r.id,ok:ok,need:c.regNeed,want:regReqText(c.req),line:ok?step.done:'',h:s.hearts});
+  save();mgmtDirty=true;
+}
+// the speech card: who is talking and what they said
+var regQ=[],regBusy=false;
+function regSay(r,text,happy){regQ.push({r:r,t:text,h:happy});if(!regBusy)regNextSay();}
+function regNextSay(){
+  var q=regQ.shift(),el=$('regSay');if(!q){regBusy=false;el.classList.remove('on');return;}regBusy=true;
+  el.querySelector('img').src=regPortrait(q.r.id);el.querySelector('b').textContent=q.r.name;el.querySelector('span').textContent=q.t;
+  el.querySelector('.hearts').textContent=heartText(regState(q.r.id).hearts);el.classList.toggle('happy',!!q.h);
+  el.classList.remove('on');void el.offsetWidth;el.classList.add('on');
+  clearTimeout(regSay.t);regSay.t=setTimeout(regNextSay,Math.min(7000,2600+q.t.length*45));
+}
+function heartText(n){var o='';for(var i=0;i<REG_HEARTS;i++)o+=i<n?'♥':'♡';return o;}
+var regPics={};
+function regPortrait(id){
+  if(regPics[id])return regPics[id];var r=regOf(id),sc=new T.Scene();addLights(sc);var p=buildPerson(r.look);sc.add(p.g);
+  var oc=new T.OrthographicCamera(-0.42,0.42,0.42,-0.42,0.1,50);oc.position.set(4,6.4,10);oc.lookAt(0,0.58,0);
+  return regPics[id]=inkThumb(sc,oc,128);
+}
+function hitRegular(cx,cy){var best=null,bd=34;customers.forEach(function(c){if(!c.reg)return;var s=toScreen(c.x,0.9,c.z),d=Math.hypot(s.x-cx,s.y-cy);if(d<bd){bd=d;best=c;}});return best;}
+function regTapped(c){var r=regOf(c.reg),s=regState(c.reg);regSay(r,s.hearts>=REG_HEARTS?'Lovely to see you. Shop is looking great.':regStep(r).ask+(c.regNeed?' (Needs '+c.regNeed+'.)':''));}
+function regSheet(row){
+  var v=state.today&&state.today.regs;if(!v||!v.length)return;
+  v.forEach(function(q){var r=regOf(q.id),s=regState(q.id);if(!r)return;
+    row('<img src="'+regPortrait(r.id)+'" alt="" style="width:30px;height:30px;border-radius:50%;background:#fff">','#f0738a','<b>'+r.name+'</b> <span style="color:#e0566e">'+heartText(q.h!=null?q.h:s.hearts)+'</span><small>'+(q.visit?'Dropped in to say hello.':q.ok?esc(q.line||s.line):q.need?'Wanted '+q.want+', but the shop needs '+q.need+'.':'Wanted '+q.want+' and left without it.')+'</small>');});
+}
+function renderRegulars(row,note){
+  note.textContent='Regulars come back. Give them what they ask for and their story moves on. Five hearts brings a gift.';
+  var met=REGS.filter(function(r){return regState(r.id).met;});
+  if(!met.length){row('<div class="info"><b>No regulars yet</b><span>Keep the shop open; familiar faces start dropping in after a few days.</span></div>');return;}
+  met.forEach(function(r){var s=regState(r.id),done=s.hearts>=REG_HEARTS,st=regStep(r),need=done?'':regNeed(st.r);
+    row('<img class="regpic" src="'+regPortrait(r.id)+'" alt=""><div class="info"><b>'+r.name+' <i class="rh">'+heartText(s.hearts)+'</i></b>'+
+      '<span>'+esc(r.bio)+' Loves '+GENRES.find(function(g){return g.id===r.fav;}).name+'.</span>'+
+      '<span class="rq">'+(done?'Story complete. Gift: '+DEF[r.gift].name+'.':'Next visit: '+regReqText(st.r)+(need?' · <b class="none">needs '+need+'</b>':''))+'</span>'+
+      (s.line?'<span class="rl">“'+esc(s.line)+'”</span>':'')+'</div>','regrow');});
+  var left=REGS.length-met.length;if(left)row('<div class="info"><span>'+left+' more to meet. Some only come once you sell what they love.</span></div>');
+}
+
+function sketchTexture(){      // Juniper's pencil sketch of your shop, with its name underneath
+  return canvasTex(256,192,function(x,w,h){x.fillStyle='#f7f3ea';x.fillRect(0,0,w,h);x.strokeStyle='#4a4048';x.lineWidth=1.6;x.lineCap='round';
+    var r=mulberry(77);function ln(a,b,c,d){x.beginPath();x.moveTo(a+(r()-0.5)*2,b+(r()-0.5)*2);x.lineTo(c+(r()-0.5)*2,d+(r()-0.5)*2);x.stroke();}
+    ln(40,60,216,60);ln(40,60,40,150);ln(216,60,216,150);ln(30,150,226,150);ln(30,60,128,24);ln(226,60,128,24);
+    x.strokeRect(58,92,44,40);ln(80,92,80,132);ln(58,112,102,112);x.strokeRect(150,96,36,54);x.beginPath();x.arc(178,124,2,0,7);x.stroke();
+    for(var i=0;i<7;i++)ln(58+i*20,60,52+i*20,48);ln(118,140,126,128);ln(126,128,134,140);x.beginPath();x.arc(126,124,5,0,7);x.stroke();
+    x.fillStyle='#4a4048';x.font='italic 600 16px Fraunces, Georgia, serif';x.textAlign='center';x.fillText(shopName(),w/2,176);x.font='italic 11px Nunito, sans-serif';x.fillText('— J.',w-28,188);});
+}
+function truckMenuTexture(){
+  return canvasTex(200,270,function(x,w,h){x.fillStyle='#fff5e4';x.fillRect(0,0,w,h);x.fillStyle='#c2573f';x.fillRect(0,0,w,54);
+    x.fillStyle='#fff5e4';x.textAlign='center';x.font='800 22px Nunito, sans-serif';x.fillText("DEV'S TRUCK",w/2,34);
+    x.fillStyle='#3b2c40';x.font='600 15px Nunito, sans-serif';x.textAlign='left';
+    [['Soup','4'],['More soup','4'],['Soup (cold)','5'],['Toast','3'],['Scone','3'],['Surprise','?']].forEach(function(q,i){x.fillText(q[0],18,88+i*28);x.textAlign='right';x.fillText(q[1],w-18,88+i*28);x.textAlign='left';});
+    x.font='italic 12px Nunito, sans-serif';x.textAlign='center';x.fillText('soup is not wet salad',w/2,h-12);});
+}
+
+window.__shop={REGS:REGS,regArrive:function(id){regArrive(id);},regDayStart:function(){regDayStart();},miniStart:function(id){var d=MINIS.find(function(q){return q.id===id;});state.mini={id:id,day:state.day,note:d.note};dayLook=null;},evAnnounce:function(){state.nextEvent=0;evMaybeAnnounce();},evDayStart:function(){evDayStart();},FEAT_G:function(){return FEAT_G;},TITLES:TITLES,setOutside:function(o){setOutside(o);},outside:function(){return outsideView;},renameShop:function(n){renameShop(n);},dayOn:function(){return dayOn();},endDay:function(){endDay();},nextDay:function(){nextDay();},catArrives:function(){catArrives();},cat:function(){return cat;},petCat:function(){petCat(true);},hitCat:function(x,y){return hitCat(x,y);},peek:function(src){return eval(src);},renderAudio:function(a,b,c){return renderAudio(a,b,c);},shopStyle:function(){return shopStyle();},audio:AU,sfx:function(n){sfx(n);},lowWallNudge:function(a,b,c,d){return lowWallNudge(a,b,c,d);},edgeBetween:function(a,b,c,d){return edgeBetween(a,b,c,d);},roomAt:function(x,z){return roomAt(x,z);},setKidChance:function(v){KID_CHANCE=v;},spawnKid:function(c){return spawnKid(c);},state:state,items:items,customers:customers,addItem:addItem,simulate:simulate,cam:cam,turn:turn,walls:walls,
   cozy:cozyTotal,level:function(){return level;},update:updateHUD,select:select,toScreen:toScreen,wallPose:wallPose,DEFS:DEFS,
   buildPerson:buildPerson,STYLES:STYLES,peopleRoot:peopleRoot,roots:[roomRoot,itemsRoot],workers:workers,GENRES:GENRES,trend:trend,openMgmt:openMgmt,buy:buy,hire:hire,goals:GOALS,checkGoals:checkGoals,commandOwner:function(it){return assign(workers[0],it);},assign:function(i,it){return assign(workers[i],it);},setBuild:setBuild,canPlace:canPlace,DEF:DEF,walkable:walkable,solidAt:function(x,z){return solid[z][x]?solid[z][x].def.id:null;},building:function(){return buildMode;},edgeBetween:edgeBetween,setTop:setTop,lookImage:lookImage,room:function(){return [W,D,DOOR.x,DOOR.z];},rooms:function(){return rooms.map(function(R){return [R.x,R.z,R.w,R.d];});},roomSpots:roomSpots,addRoom:addRoom,startExpand:startExpand,cutOffRoom:cutOffRoom,roomAt:roomAt,nextRequest:function(){return nextRequest();},tutPhase:function(){return tutPhase();},cue:function(){return cueNow?{s:cueNow.s,d:cueNow.d,p:cueNow.p,w:cueNow.w,m:!!cueNow.m,seen:cueSeen}:null;},tick:function(){checkGoals();renderGoal();updatePointer(performance.now());},picker:function(){return picker;},staffMarks:staffMarks,backDoor:function(){return {r:backDoor.r,w:backDoor.w,seg:backDoor.seg,x:backDoor.tile.x,z:backDoor.tile.z};},doorScreen:function(){var p=new T.Vector3();backDoor.g.getWorldPosition(p);var q=toScreen(p.x,1.0,p.z);return [q.x,q.y];},paintAt:function(cx,cy){return paintAt(cx,cy);},startPaint:startPaint,stopPaint:stopPaint,paintAll:function(){return paintAll();},painter:function(){return painter;},walkable:walkable,jobsOpen:function(){return jobsOpen();},openJobs:openJobs,variantThumb:variantThumb,tileRes:tileRes,queueSlots:queueSlots,hitItem:hitItem,hitWorker:hitWorker,tap:tap,sel:function(){return selWorker;},
   setLevelXP:function(xp){state.salesXP=xp;updateHUD();},
