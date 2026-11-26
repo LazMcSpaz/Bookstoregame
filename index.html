@@ -2896,6 +2896,7 @@ function decide(c){
     return;
   }
   if(c.fan){evFanDecide(c);return;}
+  if(miniPlan(c)){if(c.plan.indexOf('book')>=0){c.wantGenre=pickGenre();showWant(c);}nextIntent(c);return;}
   var r=rnd();
   c.plan=!byRole('snack').length?['book']:r<0.4?['book']:r<0.68?['snack']:rnd()<0.5?['book','snack']:['snack','book'];      // nobody comes for coffee before there is any
   if(c.kidC&&state.genres.indexOf(4)>=0&&rnd()<0.75){if(c.plan.indexOf('book')<0)c.plan.unshift('book');c.wantGenre=4;showWant(c);}
@@ -3222,6 +3223,7 @@ function earn(n,c){
   if(c)c.spent=(c.spent||0)+n;if(state.today)state.today.coins+=n;
   state.coins+=n;state.salesXP+=n;state.sales++;
   floater('+'+n,c.x,c.y+1.25,c.z);mgmtDirty=true;sfx('coin');
+  if(c&&!c.kid&&miniOn('tipper')&&!state.mini.flagged&&hourNow()>=10){state.mini.flagged=true;c.tipper=true;miniPaid(c);}      // the day's generous customer tips on their first purchase
   bump('coinPill');updateHUD();save();
 }
 // The first steps are unhurried. Nobody walks in until someone is at the till and there are books out; the first sale
@@ -3241,17 +3243,17 @@ function simulate(dt){
   if(spawnTimer<=0){
     var pace=tutPace();
     var adults=customers.filter(function(o){return !o.kid;}).length;
-    if(!shopClosed()&&(pace?pace.max>adults&&simT-lastSpawn>=pace.gap*tutVary:adults<maxCustomers()+evFanRoom())){
+    if(!shopClosed()&&(pace?pace.max>adults&&simT-lastSpawn>=pace.gap*tutVary:adults<maxCustomers()+evFanRoom()+miniRoom())){
       var nc=spawnCustomer(),rq=nextRequest();lastSpawn=simT;tutVary=0.9+rnd()*0.35;      // not quite like clockwork
-      if(!pace&&rq==null)evMaybeFan(nc);
+      if(!pace&&rq==null){evMaybeFan(nc);miniFlag(nc);}
       if(!pace&&rq==null&&!nc.fan&&kidSpots().length&&rnd()<KID_CHANCE)spawnKid(nc);
       if(rq!=null&&simT>=reqHold&&!customers.some(function(o){return o.scout!=null;}))nc.scout=rq;
     }
-    spawnTimer=pace?1:spawnGap()*ratingPace()*evPace()*(0.7+rnd()*0.6);      // during the first steps, look again every second: the door opens the moment the shop is ready
+    spawnTimer=pace?1:spawnGap()*ratingPace()*evPace()*miniPace()*(0.7+rnd()*0.6);      // during the first steps, look again every second: the door opens the moment the shop is ready
   }
   for(var i=customers.length-1;i>=0;i--)updateCustomer(customers[i],dt);
   for(i=0;i<workers.length;i++)updateWorker(workers[i],dt);
-  stepTrend(dt);stepDay(dt);updateCat(dt);updateFrontDoors(dt);updateInnerDoors(dt);
+  stepTrend(dt);stepDay(dt);updateCat(dt);miniTick();updateRain(dt);updateFrontDoors(dt);updateInnerDoors(dt);
 }
 function ratingPace(){return state.rating==null?1:clamp(1.15-0.075*(state.rating-2),0.88,1.15);}      // a well-reviewed shop gets visitors a little more often
 
@@ -4793,10 +4795,10 @@ function buy(k,unit,pack){
     lastBuy={k:k,t:Date.now(),n:0,bad:true};noteMsg={t:Date.now(),text:'You need '+(cost-state.coins)+' more coins for that.'};
     toast(noteMsg.text);renderMgmt();setTimeout(function(){mgmtDirty=true;},2300);return;
   }
-  lastBuy={k:k,t:Date.now(),n:pack,bad:false};setTimeout(function(){mgmtDirty=true;},1050);
+  var bonus=miniOrderBonus(k);lastBuy={k:k,t:Date.now(),n:pack*bonus,bad:false};setTimeout(function(){mgmtDirty=true;},1050);
   try{if(navigator.vibrate)navigator.vibrate(12);}catch(_){}
   bump('coinPill');
-  state.coins-=cost;state.stock[k]=(state.stock[k]||0)+pack;state.stats.orders++;
+  state.coins-=cost;state.stock[k]=(state.stock[k]||0)+pack*bonus;state.stats.orders++;
   items.forEach(refreshStock);updateHUD();renderMgmt();save();
 }
 function hire(){
@@ -4862,7 +4864,7 @@ function renderMgmt0(){
     });
     Object.keys(GOODS).forEach(function(k){
       if(!items.some(function(i){return i.def.good===k;}))return;      // nothing to list until something in the shop uses it
-      stockRow(k,GOODS[k].name,GOODS[k].col,'',GOODS[k].cost,GOODS[k].pack);
+      stockRow(k,GOODS[k].name,GOODS[k].col,miniOn('sale')?' <i class="tag hot">2 for 1</i>':'',GOODS[k].cost,GOODS[k].pack);
     });
     if(openGenres().length<GENRES.length-1)row('<div class="info"><span>More genres turn up when customers ask for them.</span></div>','locked');
   }else if(mgmtTab==='jobs'){
@@ -5017,6 +5019,7 @@ function load(){
     var ev=d.s.event;
     state.event=ev&&typeof ev==='object'&&TITLES[ev.t|0]?{t:ev.t|0,release:ev.release|0,pre:Math.max(0,ev.pre|0),cap:Math.max(1,ev.cap|0),sold:ev.sold|0,missed:ev.missed|0,rush:Math.max(0,ev.rush|0),fresh:!!ev.fresh}:null;
     state.nextEvent=typeof d.s.nextEvent==='number'?d.s.nextEvent:null;state.titlesSeen=Array.isArray(d.s.titlesSeen)?d.s.titlesSeen.filter(function(i){return TITLES[i];}):[];
+    var mn=d.s.mini;state.mini=mn&&typeof mn==='object'&&MINIS.some(function(q){return q.id===mn.id;})?mn:null;state.miniRecent=Array.isArray(d.s.miniRecent)?d.s.miniRecent.slice(-4):[];
     applyFeature();
     level=levelFor(xpTotal());
     var order={arch:0,edge:0,solid:0,rug:0,surf:1,wall:2};
@@ -5382,6 +5385,7 @@ function review(c){
   if(c.gaveUp||(c.waitT||0)>PATIENCE*0.7){s-=1;if(!c.petted)kind='wait';}
   s=clamp(Math.round(s*2)/2,1,5);
   state.today.stars.push(s);
+  if(c.critic){miniReview(c,s);return;}
   if(state.today.notes.length<14){var pool=REVIEWS[kind];state.today.notes.push({s:s,t:pick(pool).replace('{g}',g||'mystery')});}
 }
 function starText(s){var o='',i,n=Math.round(s);for(i=1;i<=5;i++)o+=n>=i?'\u2605':'\u2606';return o;}      // whole stars: half-star symbols are missing from some phone fonts
@@ -5419,7 +5423,7 @@ function showDaySheet(){
   var top=bestOf(t.sold);if(top)row('★','#e0a020','Best seller: <b>'+top[0]+'</b><small>'+top[1]+' sold today</small>');
   var miss=bestOf(t.missed);if(miss)row('!','#d77a6a','<b>'+miss[0]+'</b> was asked for '+miss[1]+(miss[1]===1?' time':' times')+'<small>Nobody found any. Stocking it brings those sales back.</small>','warn');
   if(t.pets){var coat=state.cat&&CAT_COATS[state.cat.coat]||CAT_COATS[0];row('<svg viewBox="0 0 24 24" width="17" height="17"><g fill="#fff"><ellipse cx="12" cy="15.5" rx="4.6" ry="3.8"/><circle cx="6.3" cy="10.5" r="2"/><circle cx="9.6" cy="7.2" r="2"/><circle cx="14.4" cy="7.2" r="2"/><circle cx="17.7" cy="10.5" r="2"/></g></svg>',coat.n==='Patches'?'#c9a27e':coat.c,'<b>'+(state.cat?state.cat.name:'The cat')+'</b> got '+t.pets+(t.pets===1?' pat':' pats')+'<small>'+(t.pets>=15?'The most loved cat on the street.':t.pets>=5?'Customers keep stopping to say hello.':'A quiet day of naps.')+'</small>');}
-  evSheet(row);
+  miniSheet(row);evSheet(row);
   if(t.notes.length){
     var h=document.createElement('h3');h.textContent='What customers said';el.appendChild(stag(h));
     var ns=t.notes.slice().sort(function(a,b){return b.s-a.s;}),show=[ns[0]];
@@ -5440,7 +5444,7 @@ function nextDay(){
   clearingDay=true;customers.slice().forEach(function(c){removeCustomer(c);});clearingDay=false;
   workers.forEach(function(w){w.task=null;});
   if(!state.cat&&state.day>=CAT_DAY)catArrives();
-  evDayStart();
+  evDayStart();miniDayStart();
   save();updateClock(true);
 }
 var clockShown='';
@@ -5457,8 +5461,9 @@ function applyDayLight(){
   var h=hourNow(),k=Math.round(h*20)/20;if(k===dayLook)return;dayLook=k;
   var mo=clamp((11-h)/2,0,1),ev=clamp((h-15.5)/2.5,0,1);
   var hc=lerpC(0xfff0dc,0xfff6ea,mo).lerp(new T.Color(0xffcfa8),ev),sc=lerpC(0xffe6c2,0xfff3dc,mo).lerp(new T.Color(0xffa060),ev);
-  if(hemiLight){hemiLight.color.copy(hc);hemiLight.intensity=0.72+mo*0.03-ev*0.15;}
-  sun.color.copy(sc);sun.intensity=0.62-ev*0.2;
+  var wet=miniOn('rain')?1:0;if(wet){hc.lerp(new T.Color(0xc9d2de),0.45);sc.lerp(new T.Color(0xb9c4d2),0.6);}      // rain greys the light
+  if(hemiLight){hemiLight.color.copy(hc);hemiLight.intensity=0.72+mo*0.03-ev*0.15-wet*0.04;}
+  sun.color.copy(sc);sun.intensity=0.62-ev*0.2-wet*0.16;
   var dusk=lerpC(0x5a4a7c,0x6a5c8e,mo).lerp(new T.Color(0x744a66),ev);document.body.style.setProperty('--dusk','#'+dusk.getHexString());
   lampEv=ev;
 }
@@ -5628,7 +5633,7 @@ function petCat(byPlayer){
 // customers who walk past stop to say hello
 function catVisit(c){
   if(!cat||c.petted||cat.state==='walk'||c.scout!=null)return false;
-  if(Math.hypot(c.x-cat.x,c.z-cat.z)>4.5||rnd()>(c.kid?0.6:0.35))return false;
+  if(Math.hypot(c.x-cat.x,c.z-cat.z)>4.5||rnd()>miniPetChance(c))return false;
   var ct={x:Math.floor(cat.x),z:Math.floor(cat.z)},spots=DIRS.map(function(d){return {x:ct.x+d[0],z:ct.z+d[1]};}).filter(function(t){return walkable(t.x,t.z)&&!edgeBetween(ct.x,ct.z,t.x,t.z);});
   if(!spots.length)return false;
   c.item=null;c.redo=function(){nextIntent(c);};
@@ -5961,7 +5966,99 @@ function bannerModel(g,v,out){
   var p=textPlane(bannerTexture(256,420),w,h);p.position.set(0,0,z+(out?-0.012:0.012));if(out)p.rotation.y=Math.PI;g.add(p);
 }
 
-window.__shop={evAnnounce:function(){state.nextEvent=0;evMaybeAnnounce();},evDayStart:function(){evDayStart();},FEAT_G:function(){return FEAT_G;},TITLES:TITLES,setOutside:function(o){setOutside(o);},outside:function(){return outsideView;},renameShop:function(n){renameShop(n);},dayOn:function(){return dayOn();},endDay:function(){endDay();},nextDay:function(){nextDay();},catArrives:function(){catArrives();},cat:function(){return cat;},petCat:function(){petCat(true);},hitCat:function(x,y){return hitCat(x,y);},peek:function(src){return eval(src);},renderAudio:function(a,b,c){return renderAudio(a,b,c);},shopStyle:function(){return shopStyle();},audio:AU,sfx:function(n){sfx(n);},lowWallNudge:function(a,b,c,d){return lowWallNudge(a,b,c,d);},edgeBetween:function(a,b,c,d){return edgeBetween(a,b,c,d);},roomAt:function(x,z){return roomAt(x,z);},setKidChance:function(v){KID_CHANCE=v;},spawnKid:function(c){return spawnKid(c);},state:state,items:items,customers:customers,addItem:addItem,simulate:simulate,cam:cam,turn:turn,walls:walls,
+/* ---------- small days: now and then a day has a little twist. Each lasts one day, is announced in the morning,
+   and gets a line on the end-of-day screen. None of them needs anything built. ---------- */
+var MINIS=[
+  {id:'rain',name:'Rainy day',icon:'☂',col:'#6c86a8',note:'Rain all day. People duck in for coffee more than books.',sheet:'Coffee and treats did well in the rain.'},
+  {id:'sun',name:'Sunny day',icon:'☀',col:'#e0a020',note:'Lovely weather. More people out walking past.',sheet:'The sunshine brought people in.'},
+  {id:'bus',name:'Tour bus',icon:'🚌',col:'#c7653a',note:'A tour bus is stopping here around noon.',sheet:'The tour group came and went.',burst:{h:12,n:5}},
+  {id:'school',name:'School trip',icon:'✎',col:'#4fa3a5',note:'A class is visiting this afternoon.',sheet:'The class trip was loud and lovely.',burst:{h:14,n:4,kids:true},need:function(){return state.genres.indexOf(KIDS_G)>=0;}},
+  {id:'club',name:'Book club',icon:'☕',col:'#8a5a8a',note:'A book club is meeting here at 3.',sheet:'The book club stayed for coffee.',burst:{h:15,n:4,club:true},need:function(){return byRole('snack').length>0;}},
+  {id:'critic',name:'Food critic',icon:'✒',col:'#3b2c40',note:'Word is a food critic is in town today.',sheet:''},
+  {id:'tipper',name:'Generous mood',icon:'♥',col:'#d0505f',note:'Someone in town is in a generous mood.',sheet:''},
+  {id:'box',name:'Free books',icon:'📦',col:'#a8693f',note:'',sheet:''},
+  {id:'sale',name:'Supplier sale',icon:'%',col:'#4f9e6b',note:'Supplier sale: coffee and pastry orders come double today.',sheet:'The supplier sale is over.',need:function(){return byRole('snack').length>0;}},
+  {id:'cat',name:'Playful cat',icon:'🐾',col:'#9b876f',note:'',sheet:'',need:function(){return !!state.cat;}}];
+var MINI_CHANCE=0.35,MINI_FIRST=3;
+function miniOn(id){var m=state.mini;return !!m&&m.day===state.day&&m.id===id;}
+function miniDef(){var m=state.mini;return m&&m.day===state.day?MINIS.find(function(d){return d.id===m.id;}):null;}
+function miniDayStart(){
+  var was=state.mini;state.mini=null;dayLook=null;
+  if(state.day<MINI_FIRST||state.goal<TUT_N||(state.event&&state.day===state.event.release))return;
+  if(rnd()>MINI_CHANCE)return;
+  var recent=state.miniRecent||[],pool=MINIS.filter(function(d){return recent.indexOf(d.id)<0&&(!d.need||d.need());});
+  if(!pool.length)return;
+  var d=pick(pool),m={id:d.id,day:state.day};state.mini=m;state.miniRecent=recent.concat([d.id]).slice(-4);
+  var note=d.note;
+  if(d.id==='box'){var g=openGenres().filter(function(i){return i!==FEAT_G;}),gi=pick(g),G=GENRES[gi];state.stock[G.id]=(state.stock[G.id]||0)+8;m.g=gi;items.forEach(refreshStock);note='A publisher sent a free box: 8 '+G.name+' books are in the back.';}
+  if(d.id==='cat')note=state.cat.name+' is extra playful today. Customers can\'t resist.';
+  m.note=note;
+  setTimeout(function(){toast(note);},was?900:900);
+}
+// knobs the rest of the game reads
+function miniPace(){return miniOn('sun')?0.82:miniOn('rain')?1.08:1;}
+function miniRoom(){return miniOn('sun')?2:0;}
+function miniPlan(c){
+  if(c.club){c.plan=['snack','book'];return true;}
+  if(miniOn('rain')&&byRole('snack').length&&rnd()<0.5){c.plan=rnd()<0.6?['snack']:['snack','book'];return true;}
+  return false;
+}
+function miniPetChance(c){return miniOn('cat')?(c.kid?0.9:0.7):(c.kid?0.6:0.35);}
+function miniOrderBonus(k){return miniOn('sale')&&GOODS[k]?2:1;}
+function miniTick(){
+  var m=state.mini,d=miniDef();if(!d||!dayOn())return;var h=hourNow();
+  if(d.burst&&!m.burstDone&&h>=d.burst.h){m.burstDone=true;
+    for(var i=0;i<d.burst.n;i++)(function(i){setTimeout(function(){if(!dayOn())return;var c=spawnCustomer();c.mini=d.id;if(d.burst.club)c.club=true;if(d.burst.kids)spawnKid(c);},i*900);})(i);
+    if(d.id==='bus')toast('The tour bus has arrived!');else if(d.id==='school')toast('The class is here!');else if(d.id==='club')toast('The book club has arrived.');
+  }
+}
+function miniFlag(c){      // the critic and the tipper are ordinary-looking customers, one of the day's arrivals
+  var m=state.mini;if(!m||m.day!==state.day||c.kid)return;var h=hourNow();
+  if(m.id==='critic'&&!m.flagged&&h>=11){m.flagged=true;c.critic=true;setTimeout(function(){toast('The food critic just walked in.');floater('Critic',c.x,c.y+1.9,c.z,'');},300);}
+}
+function miniPaid(c){
+  if(c.tipper&&!c.tipped){c.tipped=true;earn(25,c);floater('Big tip! +25',c.x,c.y+1.9,c.z,'coin');if(state.mini)state.mini.tip=25;}
+}
+function miniReview(c,s){
+  if(!c.critic)return s;
+  var m=state.mini;s=clamp(Math.round(s*2)/2,1,5);
+  state.today.stars.push(s,s);      // the critic's review counts three times over
+  if(m)m.criticS=s;
+  state.today.notes.unshift({s:s,t:pick(s>=4.5?['A small marvel. The coffee is honest and the shelves are better.','Charming beyond reason. I will be back, unpaid.']:s>=3.5?['Pleasant. The armchairs alone are worth the trip.','Solid. A shop that knows what it is.']:['Pleasant, if forgettable.','Fine. Just fine. Like a beige cardigan.'])+' (the critic)'});
+  return s;
+}
+function miniSheet(row){
+  var m=state.mini,d=miniDef();if(!d)return;
+  var line=d.sheet,extra='';
+  if(d.id==='critic')line=m.criticS!=null?'The critic gave you '+starText(m.criticS):'The critic never showed up.';
+  if(d.id==='tipper')line=m.tip?'Someone left a 25-coin tip.':'Nobody felt that generous after all.';
+  if(d.id==='box')line=m.note||'A free box of books arrived.';
+  if(d.id==='cat')line=state.cat?state.cat.name+' was the star of the shop.':'';
+  if(!line)return;
+  row('<span style="font-size:15px">'+d.icon+'</span>',d.col,'<b>'+d.name+'</b><small>'+esc(line)+'</small>');
+}
+// rain: falling streaks over the street (not inside, where the roof would be), and a greyer light
+var rainFx=null;
+function updateRain(dt){
+  var on=miniOn('rain')&&rooms.length;
+  if(!on){if(rainFx){rainFx.visible=false;}return;}
+  if(!rainFx){
+    var N=380,pos=new Float32Array(N*6),g=new T.BufferGeometry();g.setAttribute('position',new T.BufferAttribute(pos,3));
+    rainFx=new T.LineSegments(g,new T.LineBasicMaterial({color:0xdfe7f2,transparent:true,opacity:0.7,depthWrite:false}));rainFx.layers.set(1);rainFx.renderOrder=5;rainFx.frustumCulled=false;rainFx.userData.d=[];
+    for(var i=0;i<N;i++)rainFx.userData.d.push({x:0,y:rnd()*3.2,z:0,s:5+rnd()*2,u:rnd(),v:rnd()});
+    scene.add(rainFx);
+  }
+  rainFx.visible=true;
+  var fz=frontLine(),sp=shopSpan(),x0=sp[0]-4,x1=sp[1]+4,a=rainFx.geometry.attributes.position.array;
+  rainFx.userData.d.forEach(function(p,i){
+    p.y-=p.s*dt;if(p.y<0){p.y=3+rnd()*0.4;p.u=rnd();p.v=rnd();}
+    var x=x0+p.u*(x1-x0),z=fz+0.25+p.v*6.8;
+    a[i*6]=x;a[i*6+1]=p.y;a[i*6+2]=z;a[i*6+3]=x-0.03;a[i*6+4]=p.y+0.22;a[i*6+5]=z-0.03;
+  });
+  rainFx.geometry.attributes.position.needsUpdate=true;
+}
+
+window.__shop={miniStart:function(id){var d=MINIS.find(function(q){return q.id===id;});state.mini={id:id,day:state.day,note:d.note};dayLook=null;},evAnnounce:function(){state.nextEvent=0;evMaybeAnnounce();},evDayStart:function(){evDayStart();},FEAT_G:function(){return FEAT_G;},TITLES:TITLES,setOutside:function(o){setOutside(o);},outside:function(){return outsideView;},renameShop:function(n){renameShop(n);},dayOn:function(){return dayOn();},endDay:function(){endDay();},nextDay:function(){nextDay();},catArrives:function(){catArrives();},cat:function(){return cat;},petCat:function(){petCat(true);},hitCat:function(x,y){return hitCat(x,y);},peek:function(src){return eval(src);},renderAudio:function(a,b,c){return renderAudio(a,b,c);},shopStyle:function(){return shopStyle();},audio:AU,sfx:function(n){sfx(n);},lowWallNudge:function(a,b,c,d){return lowWallNudge(a,b,c,d);},edgeBetween:function(a,b,c,d){return edgeBetween(a,b,c,d);},roomAt:function(x,z){return roomAt(x,z);},setKidChance:function(v){KID_CHANCE=v;},spawnKid:function(c){return spawnKid(c);},state:state,items:items,customers:customers,addItem:addItem,simulate:simulate,cam:cam,turn:turn,walls:walls,
   cozy:cozyTotal,level:function(){return level;},update:updateHUD,select:select,toScreen:toScreen,wallPose:wallPose,DEFS:DEFS,
   buildPerson:buildPerson,STYLES:STYLES,peopleRoot:peopleRoot,roots:[roomRoot,itemsRoot],workers:workers,GENRES:GENRES,trend:trend,openMgmt:openMgmt,buy:buy,hire:hire,goals:GOALS,checkGoals:checkGoals,commandOwner:function(it){return assign(workers[0],it);},assign:function(i,it){return assign(workers[i],it);},setBuild:setBuild,canPlace:canPlace,DEF:DEF,walkable:walkable,solidAt:function(x,z){return solid[z][x]?solid[z][x].def.id:null;},building:function(){return buildMode;},edgeBetween:edgeBetween,setTop:setTop,lookImage:lookImage,room:function(){return [W,D,DOOR.x,DOOR.z];},rooms:function(){return rooms.map(function(R){return [R.x,R.z,R.w,R.d];});},roomSpots:roomSpots,addRoom:addRoom,startExpand:startExpand,cutOffRoom:cutOffRoom,roomAt:roomAt,nextRequest:function(){return nextRequest();},tutPhase:function(){return tutPhase();},cue:function(){return cueNow?{s:cueNow.s,d:cueNow.d,p:cueNow.p,w:cueNow.w,m:!!cueNow.m,seen:cueSeen}:null;},tick:function(){checkGoals();renderGoal();updatePointer(performance.now());},picker:function(){return picker;},staffMarks:staffMarks,backDoor:function(){return {r:backDoor.r,w:backDoor.w,seg:backDoor.seg,x:backDoor.tile.x,z:backDoor.tile.z};},doorScreen:function(){var p=new T.Vector3();backDoor.g.getWorldPosition(p);var q=toScreen(p.x,1.0,p.z);return [q.x,q.y];},paintAt:function(cx,cy){return paintAt(cx,cy);},startPaint:startPaint,stopPaint:stopPaint,paintAll:function(){return paintAll();},painter:function(){return painter;},walkable:walkable,jobsOpen:function(){return jobsOpen();},openJobs:openJobs,variantThumb:variantThumb,tileRes:tileRes,queueSlots:queueSlots,hitItem:hitItem,hitWorker:hitWorker,tap:tap,sel:function(){return selWorker;},
   setLevelXP:function(xp){state.salesXP=xp;updateHUD();},
