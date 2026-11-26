@@ -1961,7 +1961,7 @@ var DEFS=[
       b.box(0.22,0.1,0.14,'#8a5a36',0.15,0.05,-0.1); [0.08,0.15,0.22].forEach(function(x,i){b.box(0.05,0.012,0.1,['#5fa777','#e07a5f','#f2b544'][i],x,0.105,-0.1);});
       g.add(b.mesh());
       var spots=[[0.12,0.1],[0.24,0.1],[0.18,0.2]];spots.forEach(function(p,i){var cb=new Builder();for(var k=0;k<2;k++){cb.cyl(0.045,0.04,0.06,['#f1ebe1','#9fc6c2','#f2b544'][i],p[0],0.03+k*0.065,p[1],10);}var m=cb.mesh(true);g.add(m);st.push({m:m,min:i*3+1});});}},
-  {id:'coldfridge',name:'Cold Drinks Fridge',tab:'Café',cost:60,level:3,cozy:2,layer:'solid',w:1,d:1,h:1.5,role:'snack',good:'cold',cap:12,price:4,
+  {id:'coldfridge',name:'Cold Drinks Fridge',tab:'Café',cost:60,level:3,cozy:2,layer:'solid',w:1,d:1,h:1.5,role:'snack',good:'cold',staffFront:true,cap:12,price:4,
     build:function(g,st,v,mask,thumb){var b=new Builder();
       b.box(0.82,1.46,0.7,'#e8eef2',0,0.73,-0.08); b.box(0.84,0.18,0.72,'#e05a4a',0,1.4,-0.08); b.box(0.04,0.6,0.04,'#8d7f8c',0.32,0.75,0.29);
       [0.3,0.62,0.94].forEach(function(y){b.box(0.68,0.02,0.5,'#cfd5db',0,y,-0.1);});
@@ -2212,7 +2212,7 @@ var DEFS=[
       b.box(0.36,0.24,0.03,'#2d2a2e',0,0.3,0.0,0,-0.4);b.box(0.31,0.19,0.006,'#7fc8d8',0,0.3,0.016,0,-0.4);b.box(0.2,0.03,0.006,'#f2b544',0,0.33,0.02,0,-0.4);
       b.box(0.08,0.03,0.12,'#2d2a2e',0.27,0.02,0.08,-0.3);b.box(0.05,0.006,0.04,'#7fc8d8',0.27,0.04,0.06,-0.3);
       b.cyl(0.05,0.045,0.11,'#cfeaf5',-0.26,0.055,0.07,12);b.ball(0.02,'#e0a020',-0.26,0.03,0.07);b.ball(0.018,'#cfd5db',-0.25,0.05,0.08);
-      g.add(b.mesh(true));}},
+      var m=b.mesh(true);m.rotation.y=Math.PI;g.add(m);}},      // the screen faces the staff side
   {id:'pickup',name:'Pickup Spot',tab:'Café',cost:20,level:2,cozy:1,layer:'surf',h:0.3,pickup:true,
     build:function(g,st){var b=new Builder();      // a big tray with a bell: finished orders wait here
       b.box(0.62,0.025,0.4,'#8a5a36',0,0.0125,0.02);[0.215,-0.175].forEach(function(z){b.box(0.62,0.04,0.02,'#6a4530',0,0.035,z);});[-0.3,0.3].forEach(function(x){b.box(0.02,0.04,0.41,'#6a4530',x,0.035,0.02);});
@@ -3701,8 +3701,8 @@ function clearWorkers(){workers.forEach(function(w){setTask(w,null);freeTile(w);
 function isStation(it){return it.def.role==='counter'||it.def.role==='snack';}
 function stations(){return items.filter(isStation);}
 function dutyHolder(it){return it.worker||null;}
-function staffSpots(it){      // behind the station first, any other free side as a fallback
-  var f=frontOf(it.rot),b={x:it.x-f.dx,z:it.z-f.dz},pri=[],sec=[];
+function staffSpots(it){      // behind the station first, any other free side as a fallback (a fridge is worked from its door side)
+  var f=frontOf(it.rot),b=it.def.staffFront?{x:it.x+f.dx,z:it.z+f.dz}:{x:it.x-f.dx,z:it.z-f.dz},pri=[],sec=[];
   if(walkable(b.x,b.z)&&!edgeBetween(it.x,it.z,b.x,b.z))pri.push(b);
   DIRS.forEach(function(d){var n={x:it.x+d[0],z:it.z+d[1]};if(walkable(n.x,n.z)&&!edgeBetween(it.x,it.z,n.x,n.z)&&!(n.x===b.x&&n.z===b.z))sec.push(n);});
   return [pri,sec];
