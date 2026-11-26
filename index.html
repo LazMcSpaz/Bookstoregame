@@ -2206,18 +2206,19 @@ var DEFS=[
     build:function(g){var b=new Builder();b.box(0.52,0.68,0.02,'#c2573f',0,0,0.01);g.add(b.mesh(false));var p=textPlane(truckMenuTexture(),0.46,0.62);p.position.set(0,0,0.023);g.add(p);}},
   {id:'trophyshelf',name:'Trophy Shelf',tab:'Room',cost:15,level:1,cozy:4,layer:'wall',segs:2,wallY:1.45,h:0.5,band:'mid',face:'in',needMedal:true,cat0:'Wall Art',
     build:function(g){trophyShelfModel(g);}},
-  {id:'orderpoint',name:'Café Order Point',tab:'Café',cost:40,level:2,cozy:1,layer:'surf',h:0.45,role:'counter',cafeOnly:true,
-    build:function(g){var b=new Builder();      // a little till for café orders only, with an ORDER HERE sign
-      b.box(0.22,0.03,0.16,'#3b2c40',-0.05,0.015,0);b.box(0.04,0.1,0.04,'#3b2c40',-0.05,0.08,-0.02);b.box(0.2,0.14,0.02,'#2d2a2e',-0.05,0.17,0.0,0,-0.35);b.box(0.17,0.11,0.005,'#7fc8d8',-0.05,0.17,0.012,0,-0.35);
-      b.box(0.02,0.3,0.02,'#5a3e28',0.17,0.15,-0.04);b.box(0.16,0.12,0.02,'#c2573f',0.17,0.33,-0.04);g.add(b.mesh(true));
-      var p=textPlane(signWords('ORDER','HERE','#c2573f'),0.15,0.11);p.position.set(0.17,0.33,-0.028);g.add(p);}},
+  {id:'orderpoint',name:'Café Order Point',tab:'Café',cost:40,level:2,cozy:1,layer:'surf',h:0.5,role:'counter',cafeOnly:true,
+    build:function(g){var b=new Builder();      // a café till: a big tilted screen on a stand, a card reader and a tip jar
+      b.box(0.34,0.04,0.26,'#3b2c40',0,0.02,0.02);b.box(0.06,0.18,0.06,'#3b2c40',0,0.13,-0.04);
+      b.box(0.36,0.24,0.03,'#2d2a2e',0,0.3,0.0,0,-0.4);b.box(0.31,0.19,0.006,'#7fc8d8',0,0.3,0.016,0,-0.4);b.box(0.2,0.03,0.006,'#f2b544',0,0.33,0.02,0,-0.4);
+      b.box(0.08,0.03,0.12,'#2d2a2e',0.27,0.02,0.08,-0.3);b.box(0.05,0.006,0.04,'#7fc8d8',0.27,0.04,0.06,-0.3);
+      b.cyl(0.05,0.045,0.11,'#cfeaf5',-0.26,0.055,0.07,12);b.ball(0.02,'#e0a020',-0.26,0.03,0.07);b.ball(0.018,'#cfd5db',-0.25,0.05,0.08);
+      g.add(b.mesh(true));}},
   {id:'pickup',name:'Pickup Spot',tab:'Café',cost:20,level:2,cozy:1,layer:'surf',h:0.3,pickup:true,
-    build:function(g,st){var b=new Builder();      // a tray and a bell: finished orders wait here
-      b.box(0.4,0.02,0.26,'#8a5a36',0,0.01,0.02);b.box(0.4,0.03,0.015,'#6a4530',0,0.03,0.15);b.box(0.4,0.03,0.015,'#6a4530',0,0.03,-0.11);
-      b.cyl(0.035,0.04,0.012,'#3b2c40',-0.15,0.026,-0.06,12);b.add(new T.SphereGeometry(0.035,12,8,0,Math.PI*2,0,Math.PI/2),'#c9a24a',-0.15,0.032,-0.06);b.cyl(0.006,0.006,0.02,'#c9a24a',-0.15,0.075,-0.06,6);
-      b.box(0.02,0.18,0.02,'#5a3e28',0.16,0.1,-0.08);b.box(0.14,0.08,0.015,'#4f9e6b',0.16,0.2,-0.08);g.add(b.mesh(true));
-      var p=textPlane(signWords('PICK','UP','#4f9e6b'),0.13,0.075);p.position.set(0.16,0.2,-0.07);g.add(p);
-      for(var k=0;k<3;k++){var cb=new Builder();cb.cyl(0.05,0.05,0.008,'#ffffff',-0.05+k*0.1,0.024,0.04,10);cb.cyl(0.032,0.026,0.05,['#f1ebe1','#9fc6c2','#f2b544'][k],-0.05+k*0.1,0.05,0.04,10);var m=cb.mesh(true);m.visible=false;g.add(m);g.userData['cup'+k]=m;}}}
+    build:function(g,st){var b=new Builder();      // a big tray with a bell: finished orders wait here
+      b.box(0.62,0.025,0.4,'#8a5a36',0,0.0125,0.02);[0.215,-0.175].forEach(function(z){b.box(0.62,0.04,0.02,'#6a4530',0,0.035,z);});[-0.3,0.3].forEach(function(x){b.box(0.02,0.04,0.41,'#6a4530',x,0.035,0.02);});
+      b.cyl(0.05,0.055,0.015,'#3b2c40',-0.22,0.032,-0.1,14);b.add(new T.SphereGeometry(0.05,14,8,0,Math.PI*2,0,Math.PI/2),'#c9a24a',-0.22,0.04,-0.1);b.cyl(0.008,0.008,0.028,'#c9a24a',-0.22,0.1,-0.1,6);
+      g.add(b.mesh(true));
+      for(var k=0;k<3;k++){var cb=new Builder(),x=-0.08+k*0.16;cb.cyl(0.07,0.07,0.01,'#ffffff',x,0.03,0.07,12);cb.cyl(0.045,0.036,0.07,['#f1ebe1','#9fc6c2','#f2b544'][k],x,0.07,0.07,12);var m=cb.mesh(true);m.visible=false;g.add(m);g.userData['cup'+k]=m;}}}
 ];
 var DEF={}; DEFS.forEach(function(d){DEF[d.id]=d;});
 // which shop level unlocks what (anything not listed is there from the start)
