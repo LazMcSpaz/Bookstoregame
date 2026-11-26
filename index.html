@@ -1894,13 +1894,20 @@ var DEFS=[
       [-0.37,0,0.37].forEach(function(y){b.box(0.9,0.04,0.26,c[0],0,y,0.13);});
       g.add(b.mesh());
       var n=0;[0.02,-0.35].forEach(function(y){[-0.2,0.22].forEach(function(x){var cb=new Builder();bookRow(cb,x,y,0.14,n+3);var m=cb.mesh(false);m.scale.set(1,1,0.75);g.add(m);st.push({m:m,min:n+1});n++;});});}},
-  {id:'bargainbin',name:'Bargain Bin',tab:'Shop',cost:20,level:2,cozy:1,layer:'solid',w:1,d:1,h:0.62,role:'shelf',cap:8,price:4,fixedGenre:'bargain',norot:true,variants:2,cat0:'Shelves',
-    build:function(g,st,v){var c=[['#b8874e','#8a5f34'],['#3d6b8f','#2a4c68']][v],b=new Builder();
-      b.box(0.8,0.4,0.6,c[0],0,0.24,0); b.box(0.84,0.05,0.64,c[1],0,0.45,0); b.box(0.7,0.03,0.5,'#5a3e28',0,0.4,0);
-      [[-0.36,-0.26],[0.36,-0.26],[-0.36,0.26],[0.36,0.26]].forEach(function(q){b.box(0.05,0.06,0.05,c[1],q[0],0.03,q[1]);});
-      b.box(0.34,0.16,0.012,'#f7e36b',0,0.33,0.31); g.add(b.mesh());
-      var sg=new Builder();sg.box(0.24,0.03,0.012,'#e05a4a',0,0.36,0.318);sg.box(0.16,0.03,0.012,'#3b2c40',0,0.3,0.318);g.add(sg.mesh(false));
-      for(var i=0;i<4;i++){var cb=new Builder(),r=mulberry(9+i);for(var k=0;k<3;k++)cb.box(0.2,0.04,0.15,BOOKS[(i*3+k)%BOOKS.length],-0.22+(i%2)*0.42+(r()-0.5)*0.06,0.44+k*0.04,-0.12+Math.floor(i/2)*0.24,(r()-0.5)*1.2);var m=cb.mesh(false);g.add(m);st.push({m:m,min:i*2+1});}}},
+  {id:'bargainbin',name:'Bargain Bin',tab:'Shop',cost:20,level:2,cozy:1,layer:'solid',w:1,d:1,h:0.75,role:'shelf',cap:8,price:4,fixedGenre:'bargain',norot:true,variants:2,cat0:'Shelves',
+    build:function(g,st,v){var c=[['#b8874e','#8a5f34'],['#3d6b8f','#2a4c68']][v],b=new Builder(),H=0.5,y0=0.08;      // an open-topped wooden bin, books tumbled in
+      b.box(0.8,0.04,0.6,'#4a3326',0,y0+0.02,0);
+      b.box(0.82,H,0.04,c[0],0,y0+H/2,0.3); b.box(0.82,H,0.04,c[0],0,y0+H/2,-0.3); b.box(0.04,H,0.6,c[0],-0.41,y0+H/2,0); b.box(0.04,H,0.6,c[0],0.41,y0+H/2,0);
+      [[-0.41,0.3],[0.41,0.3],[-0.41,-0.3],[0.41,-0.3]].forEach(function(q){b.box(0.07,H+y0+0.02,0.07,c[1],q[0],(H+y0)/2,q[1]);});
+      [0.3,-0.3].forEach(function(z){b.box(0.86,0.05,0.06,c[1],0,y0+H,z);});[-0.41,0.41].forEach(function(x){b.box(0.06,0.05,0.66,c[1],x,y0+H,0);});      // the rim
+      b.box(0.86,0.04,0.045,c[1],0,y0+0.22,0.31);
+      b.box(0.04,0.42,0.04,'#5a3e28',0.3,y0+H+0.12,0.3); b.box(0.3,0.14,0.02,'#f7e36b',0.3,y0+H+0.3,0.31);
+      g.add(b.mesh());
+      var sg=new Builder();sg.box(0.22,0.035,0.01,'#e05a4a',0.3,y0+H+0.32,0.322);sg.box(0.14,0.025,0.01,'#3b2c40',0.3,y0+H+0.27,0.322);g.add(sg.mesh(false));
+      var fill=new Builder();fill.box(0.74,0.22,0.54,'#6b4a33',0,y0+0.15,0);g.add(fill.mesh(false));      // the heap under the books
+      for(var i=0;i<4;i++){var cb=new Builder(),r=mulberry(9+i),bx=-0.2+(i%2)*0.4,bz=-0.13+Math.floor(i/2)*0.26;
+        for(var k=0;k<4;k++)cb.box(0.07+r()*0.03,0.2+r()*0.05,0.14,BOOKS[(i*4+k)%BOOKS.length],bx+(r()-0.5)*0.24,y0+0.32+r()*0.06,bz+(r()-0.5)*0.1,(r()-0.5)*1.4,(r()-0.5)*0.9);
+        var m=cb.mesh(false);g.add(m);st.push({m:m,min:i*2+1});}}},
   {id:'ladderbook',name:'Ladder Bookcase',tab:'Old Library',cost:70,level:4,cozy:4,layer:'solid',w:1,d:1,h:1.9,role:'shelf',cap:8,price:9,variants:2,
     build:function(g,st,v){var c=OL_WOOD[v],b=new Builder();
       b.box(0.92,1.86,0.04,c[1],0,0.93,-0.44); b.box(0.05,1.9,0.4,c[0],-0.455,0.95,-0.26); b.box(0.05,1.9,0.4,c[0],0.455,0.95,-0.26);
@@ -1971,16 +1978,16 @@ var DEFS=[
       b.box(1.92,0.32,0.62,'#5c392c',0,0.16,0.02); b.rb(0.95,0.06,0.3,c[0],0,0.36,0.04,6);
       b.box(1.92,0.75,0.16,'#5c392c',0,0.66,-0.37); for(var k=0;k<4;k++)b.rb(0.22,0.3,0.06,c[k%2],-0.72+k*0.48,0.7,-0.27,6);
       b.box(1.96,0.06,0.2,'#7d5140',0,1.04,-0.37); g.add(b.mesh());}},
-  {id:'eggchair',name:'Egg Chair',tab:'Mid-century',cost:65,level:3,cozy:5,layer:'solid',w:1,d:1,h:1.75,role:'seat',seats:1,seatY:0.36,fwd:0.04,tip:3,variants:3,
+  {id:'eggchair',name:'Egg Chair',tab:'Mid-century',cost:65,level:3,cozy:5,layer:'solid',w:1,d:1,h:1.45,role:'seat',seats:1,seatY:0.3,fwd:0.04,tip:3,variants:3,
     build:function(g,st,v){var c=['#efe4cf','#d9a02b','#2f7f86'][v],b=new Builder(),pts=[];
-      b.disc(0.3,0.3,0.05,'#3b2c40',0,0.025,-0.18);      // a round base behind, an arched stand curving over the top
-      for(var k=0;k<=10;k++){var a=k/10*Math.PI*0.62;pts.push([0,0.05+Math.sin(a)*1.55,-0.3+(1-Math.cos(a))*0.0-Math.sin(a*0.8)*0.06+(k>6?(k-6)*0.075:0)]);}
+      b.disc(0.3,0.3,0.05,'#3b2c40',0,0.025,-0.24);      // a round base behind, an arched stand curving over the top
+      for(var k=0;k<=10;k++){var a=k/10*Math.PI*0.62;pts.push([0,0.05+Math.sin(a)*1.28,-0.3+(1-Math.cos(a))*0.0-Math.sin(a*0.8)*0.06+(k>6?(k-6)*0.075:0)]);}
       for(var k2=0;k2<pts.length-1;k2++)b.bar(0.028,0.028,'#3b2c40',0,pts[k2][1],pts[k2][2],0,pts[k2+1][1],pts[k2+1][2],8);
-      var top=pts[pts.length-1];b.bar(0.008,0.008,'#8d7f8c',0,top[1],top[2],0,1.3,0.02,4);b.ball(0.025,'#3b2c40',0,1.3,0.02);
-      b.ell(0.27,0.09,0.25,c,0,0.4,0.05); b.ell(0.23,0.21,0.08,c,0,0.66,-0.18); b.ell(0.1,0.08,0.06,'#ffffff',0.08,0.56,-0.08);      // cushions
+      var top=pts[pts.length-1];b.bar(0.008,0.008,'#8d7f8c',0,top[1],top[2],0,1.1,0.0,4);b.ball(0.025,'#3b2c40',0,1.1,0.0);
+      b.ell(0.25,0.07,0.22,c,0,0.28,0.04); b.ell(0.21,0.19,0.07,c,0,0.5,-0.17); b.ell(0.09,0.07,0.05,'#ffffff',0.08,0.42,-0.08);      // cushions
       g.add(b.mesh());
       if(!EGG_MAT){var tx=canvasTex(64,64,function(x,w,h){x.fillStyle='#c9a46a';x.fillRect(0,0,w,h);x.strokeStyle='#a07a42';x.lineWidth=3;for(var i=0;i<8;i++){x.beginPath();x.moveTo(0,i*8+4);x.lineTo(w,i*8+4);x.stroke();}x.strokeStyle='#dcbf86';x.lineWidth=1.5;for(var j=0;j<8;j++){x.beginPath();x.moveTo(j*8,0);x.lineTo(j*8,h);x.stroke();}});tx.wrapS=tx.wrapT=T.RepeatWrapping;tx.repeat.set(4,3);EGG_MAT=toon({map:tx,side:T.DoubleSide});}
-      var shell=new T.Mesh(new T.SphereGeometry(0.4,20,14,Math.PI/2+0.9,Math.PI*2-1.8,0.12,Math.PI*0.8),EGG_MAT);shell.scale.set(1,1.2,1);shell.position.set(0,0.82,0.0);shell.castShadow=true;g.add(shell);}},
+      var shell=new T.Mesh(new T.SphereGeometry(0.4,20,14,Math.PI/2+0.9,Math.PI*2-1.8,0.12,Math.PI-0.12),EGG_MAT);shell.scale.set(1,1.15,1);shell.position.set(0,0.62,0.0);shell.castShadow=true;g.add(shell);}},
   {id:'chaise',name:'Chaise Longue',tab:'Old Library',cost:75,level:5,cozy:6,layer:'solid',w:2,d:1,h:0.75,role:'seat',seats:1,seatY:0.22,fwd:0.02,tip:3,variants:3,
     build:function(g,st,v){var c=OL_SOFT[v],w=OL_WOOD[0],b=new Builder();
       b.rb(0.9,0.09,0.3,c,0.05,0.28,0.02,6); [-0.82,0.82].forEach(function(x){[-0.22,0.22].forEach(function(z){b.cyl(0.03,0.02,0.2,w[1],x,0.1,z,6);});});
@@ -2056,12 +2063,14 @@ var DEFS=[
       g.add(b.mesh(true));}},
   {id:'umbrellastand',name:'Umbrella Stand',tab:'Decor',cost:12,level:2,cozy:1,layer:'solid',w:1,d:1,h:1.0,norot:true,
     build:function(g){var b=new Builder();
-      b.cyl(0.14,0.13,0.46,'#3d6b8f',0,0.23,0,14); b.cyl(0.145,0.145,0.035,'#2a4c68',0,0.45,0,14); b.cyl(0.145,0.145,0.035,'#2a4c68',0,0.02,0,14);
-      [['#e05a4a',0.05,0.03,0.12],['#f2b544',-0.05,0.0,-0.1],['#3b2c40',0.0,-0.05,0.05]].forEach(function(q){      // three closed umbrellas, tips in the stand, hooked handles up top
-        var x0=q[1],z0=q[2],lean=q[3],x1=x0+Math.sin(lean)*0.5+q[1]*0.4,z1=z0+q[2]*0.8,y1=0.95;
-        b.bar(0.008,0.008,'#3b2c40',x0,0.1,z0,x1,y1,z1,4);
-        var t=0.35,u=0.82;b.bar(0.018,0.05,q[0],x0+(x1-x0)*t,0.1+(y1-0.1)*t,z0+(z1-z0)*t,x0+(x1-x0)*u,0.1+(y1-0.1)*u,z0+(z1-z0)*u,8);      // the folded canopy, widest near the top
-        b.bar(0.05,0.012,q[0],x0+(x1-x0)*u,0.1+(y1-0.1)*u,z0+(z1-z0)*u,x0+(x1-x0)*0.9,0.1+(y1-0.1)*0.9,z0+(z1-z0)*0.9,8);
+      b.cyl(0.14,0.13,0.44,'#3d6b8f',0,0.22,0,16); b.cyl(0.145,0.145,0.03,'#2a4c68',0,0.015,0,16);
+      b.cyl(0.115,0.115,0.012,'#16202a',0,0.442,0,16);      // the dark open mouth of the stand
+      b.add(new T.TorusGeometry(0.13,0.016,6,20),'#2a4c68',0,0.442,0,0,Math.PI/2);
+      [['#e05a4a',0.045,0.03,0.12],['#f2b544',-0.05,0.0,-0.1],['#3b2c40',0.0,-0.05,0.05]].forEach(function(q){      // three closed umbrellas coming up out of the mouth, hooked handles on top
+        var x0=q[1],z0=q[2],lean=q[3],x1=x0+Math.sin(lean)*0.5+q[1]*0.4,z1=z0+q[2]*0.8,y0=0.3,y1=0.95;
+        b.bar(0.008,0.008,'#3b2c40',x0,y0,z0,x1,y1,z1,4);
+        function at(t){return [x0+(x1-x0)*t,y0+(y1-y0)*t,z0+(z1-z0)*t];}
+        var a=at(0.18),m=at(0.75),e=at(0.86);b.bar(0.02,0.048,q[0],a[0],a[1],a[2],m[0],m[1],m[2],8);b.bar(0.048,0.012,q[0],m[0],m[1],m[2],e[0],e[1],e[2],8);      // folded canopy
         for(var k=0;k<5;k++){var a0=k/5*Math.PI,a1=(k+1)/5*Math.PI;b.bar(0.014,0.014,'#5a3e28',x1+0.05-Math.cos(a0)*0.05,y1+Math.sin(a0)*0.05,z1,x1+0.05-Math.cos(a1)*0.05,y1+Math.sin(a1)*0.05,z1,5);}});
       g.add(b.mesh(true));}},
   {id:'recordcrate',name:'Record Crate',tab:'Decor',cost:18,level:2,cozy:3,layer:'solid',w:1,d:1,h:0.5,
