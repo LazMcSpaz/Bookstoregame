@@ -299,7 +299,7 @@ body:not(.building) #bottom{padding-bottom:16px}
 .buy.ok{background:var(--honey);color:var(--ink);animation:bump .3s}
 .buy.ok span{font-size:11px}
 #mgmt .note.warn{color:var(--coral)}
-#mgmt .note.big{font-size:14px;color:var(--ink)}
+#mgmt .note.jhint{font-size:14px;color:var(--ink)}
 .buy{flex:none;background:var(--moss);color:#fff;border-radius:12px;padding:8px 10px;font-weight:800;font-size:13px;box-shadow:0 3px 0 rgba(0,0,0,.2);display:flex;align-items:center;gap:4px;min-height:40px}
 .buy svg{width:14px;height:14px}
 .buy.off{background:var(--mute)}
@@ -5305,7 +5305,7 @@ function renderMgmt0(){
       fresh?(lastBuy.bad?'nope':'got'):'');
     d.dataset.k=k;buyBtn(d,k,unit,pack);
   }
-  $('mgmtNote').classList.remove('warn');$('mgmtNote').classList.toggle('big',mgmtTab==='jobs');      // the one line that says how the jobs screen works: easy to read
+  $('mgmtNote').classList.remove('warn');$('mgmtNote').classList.toggle('jhint',mgmtTab==='jobs');      // the one line that says how the jobs screen works: easy to read
   if(mgmtTab==='regs'){renderRegulars(row,$('mgmtNote'));return;}
   if(mgmtTab==='goals'){
     $('mgmtNote').textContent='Finish goals for coins. Sales and furniture raise your shop level, which unlocks new pieces, genres and hires.';
