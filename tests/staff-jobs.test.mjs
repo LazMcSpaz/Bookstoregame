@@ -50,12 +50,12 @@ async function shop(opts = {}) {
     window.requestAnimationFrame = cb => cb && cb.name === 'frame' ? 0 : raf(cb);      // the game's own frame loop never starts: the test steps the game itself
     if (!spy) window.AudioContext = window.webkitAudioContext = undefined;      // no sound: headless Chrome has no speaker, and the game then simply stays silent
     else {      // the sound checks: note what the game asks of the phone's sound, without playing anything
-      const Real = window.AudioContext; window.__sound = { made: 0, clips: 0, asked: [] };
-      window.AudioContext = window.webkitAudioContext = function (...a) { window.__sound.made++; return new Real(...a); };
-      window.Audio = function () { window.__sound.clips++; return { play() { return Promise.resolve(); }, pause() {}, setAttribute() {}, loop: false, volume: 1 }; };
-      const session = { _t: 'auto', get type() { return this._t; }, set type(v) { this._t = v; window.__sound.asked.push(v); } };      // what iPhones offer as navigator.audioSession
+      const Real = window.AudioContext; window.__sound = { made: 0, clips: 0, asked: [], order: [] };
+      window.AudioContext = window.webkitAudioContext = function (...a) { window.__sound.made++; window.__sound.order.push('sound started'); return new Real(...a); };
+      window.Audio = function () { window.__sound.clips++; window.__sound.order.push('media clip'); return { play() { return Promise.resolve(); }, pause() {}, setAttribute() {}, loop: false, volume: 1 }; };
+      const session = { _t: 'auto', get type() { return this._t; }, set type(v) { this._t = v; window.__sound.asked.push(v); window.__sound.order.push('asked for ' + v); } };      // what iPhones offer as navigator.audioSession
       Object.defineProperty(Navigator.prototype, 'audioSession', { configurable: true, get() { return session; } });
-      if (spy.switches) localStorage.setItem('bookstore-cafe-audio', JSON.stringify(spy.switches));
+      if (spy.switches) localStorage.setItem(spy.key || 'bookstore-cafe-sound', JSON.stringify(spy.switches));
     }
     let a = seed;
     Math.random = function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
@@ -595,37 +595,43 @@ if (want('7')) {
 /* ---------- 6. the game's sound leaves other sound on the phone alone ---------- */
 if (want('6')) {
   console.log('\n6. Sound');
-  // Headless Chrome cannot show whether a phone keeps its music playing. These check what the game asks for: see the notes in the report.
+  // Headless Chrome cannot show whether a phone keeps its music playing. These check what the game asks of the phone, and when.
   const heard = g => g.ev(() => Object.assign({ state: window.__shop.audio.ctx ? window.__shop.audio.ctx.state : 'none' }, window.__sound));
+  const taps = async g => { await tap(g, '#stockBtn'); await tap(g, '#mgmtClose'); await g.page.waitForTimeout(400); };
+  // a new player
   let g = await shop({ sound: {} });
   await g.ev(() => window.T.build());
-  const atLoad = await heard(g);
-  await tap(g, '#stockBtn'); await tap(g, '#mgmtClose');      // two ordinary taps
-  await g.page.waitForTimeout(400);
+  await taps(g); await taps(g);
   let h = await heard(g);
-  check('the game asks the phone to mix its sound with whatever is playing ("ambient"), never to take over ("playback")', h.asked.length > 0 && h.asked.every(v => v === 'ambient'), 'asked for: ' + J(h.asked) + ' (before any tap: ' + J(atLoad.asked) + ')');
-  check('it plays no media clip of its own', h.clips === 0, 'media clips started: ' + h.clips);
-  check('its sound still starts on the first tap', h.made === 1 && atLoad.made === 0, 'sound started ' + h.made + ' time(s), ' + atLoad.made + ' before any tap | state: ' + h.state);
-  await g.ev(() => { document.getElementById('musicBtn').click(); document.getElementById('sfxBtn').click(); });      // Music off, Sounds off
-  await g.page.waitForTimeout(1500);
-  h = await heard(g);
-  check('Music and Sounds both switched off: the game lets go of the phone\'s sound', h.state === 'suspended', 'state of the game\'s sound: ' + h.state);
-  await g.ev(() => document.getElementById('sfxBtn').click());      // Sounds back on
+  check('a new player taps around: the game makes no sound and never touches the phone\'s sound', h.made === 0 && h.clips === 0, 'sound started ' + h.made + ' time(s) | media clips: ' + h.clips + ' | in order: ' + J(h.order));
+  const sw = await g.ev(() => [document.getElementById('musicBtn').textContent, document.getElementById('sfxBtn').textContent]);
+  check('the ? menu shows Music and Sounds off', /Off/.test(sw[0]) && /Off/.test(sw[1]), J(sw));
+  await g.ev(() => document.getElementById('sfxBtn').click());      // the player switches Sounds on
   await g.page.waitForTimeout(600);
   h = await heard(g);
-  check('Sounds switched back on: it starts again', h.state === 'running', 'state of the game\'s sound: ' + h.state);
+  const first = h.order.indexOf('sound started'), lastAsk = h.order.lastIndexOf('asked for ambient');
+  check('Sounds switched on: sound starts, and the phone was asked to mix it ("ambient") before it started, never to take over', h.made === 1 && h.clips === 0 && first > lastAsk && lastAsk >= 0 && h.asked.every(v => v === 'ambient') && h.state === 'running', 'in order: ' + J(h.order) + ' | state: ' + h.state);
+  await g.ev(() => document.getElementById('sfxBtn').click());      // and off again
+  await g.page.waitForTimeout(1200);
+  h = await heard(g);
+  check('switched off again: the game lets go of the phone\'s sound', h.state === 'suspended', 'state: ' + h.state);
   errorsSeen.push(...g.errors); await g.close();
 
-  g = await shop({ sound: { switches: { music: false, sfx: false } } });      // a player who keeps both switched off
+  // a player who switched sound on last time: it comes back on their first tap, still mixed
+  g = await shop({ sound: { switches: { music: true, sfx: true } } });
   await g.ev(() => window.T.build());
-  await tap(g, '#stockBtn'); await tap(g, '#mgmtClose');
-  await g.page.waitForTimeout(400);
+  const atLoad = await heard(g);
+  await taps(g);
   h = await heard(g);
-  check('opened with Music and Sounds both off: the game never touches the phone\'s sound', h.made === 0 && h.clips === 0, 'sound started ' + h.made + ' time(s) | media clips: ' + h.clips);
-  await g.ev(() => document.getElementById('sfxBtn').click());
-  await g.page.waitForTimeout(600);
+  check('a player who left sound on: nothing before the first tap, then sound starts mixed', atLoad.made === 0 && h.made === 1 && h.clips === 0 && h.asked.every(v => v === 'ambient') && h.order.indexOf('asked for ambient') < h.order.indexOf('sound started'), 'before any tap: ' + atLoad.made + ' | in order: ' + J(h.order));
+  errorsSeen.push(...g.errors); await g.close();
+
+  // switches saved by an older version, when sound was on by default, are not carried over
+  g = await shop({ sound: { key: 'bookstore-cafe-audio', switches: { music: true, sfx: true } } });
+  await g.ev(() => window.T.build());
+  await taps(g);
   h = await heard(g);
-  check('then Sounds switched on: sound starts, still mixed', h.made === 1 && h.asked.every(v => v === 'ambient') && h.clips === 0, 'sound started ' + h.made + ' time(s) | asked for: ' + J(h.asked) + ' | state: ' + h.state);
+  check('switches saved by the older version are not carried over: still no sound', h.made === 0 && h.clips === 0, 'sound started ' + h.made + ' time(s)');
   errorsSeen.push(...g.errors); await g.close();
 }
 
