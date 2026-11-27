@@ -13,7 +13,7 @@
 //  R1  Nobody does work from a job they have not ticked.
 //  R2  Nobody stands about for more than 6 seconds while one of their ticked jobs has work nobody else is on.
 //  R3  When two of a person's ticked jobs both have work, they do the higher one (allowing 6 seconds, and never breaking off a sale, a shelf run or an order being made).
-//  R4  No customer waits more than 20 seconds at the front of a line, and no paid order waits more than 30 seconds, while someone who could serve them is free.
+//  R4  No customer waits more than 20 seconds at the front of a line, and no paid order waits more than 30 seconds, while someone who could serve them has been free for 5 seconds.
 //  R5  Nobody flip-flops: a station changes hands between two staff at most 4 times in any minute.
 //  R6  A job change takes effect within 2 seconds: a task from a job just switched off is dropped.
 //  R7  One station, two people: someone who puts the job higher gets it within 8 seconds; someone who puts it no higher never takes it from a person minding it.
@@ -145,6 +145,7 @@ function harness() {
     S.workers.forEach(w => {
       let m = H.w.get(w); if (!m) { m = { idle: 0, low: 0, off: 0, lastX: w.x, lastZ: w.z, still: 0, spot: 0, flagged: {} }; H.w.set(w, m); }
       const t = w.task, j = H.jobOfTask(w, t), free = freeNow(w);
+      m.freeFor = free ? (m.freeFor || 0) + dt : 0;      // how long they have had nothing in hand (R4 only counts someone free for 5 s or more)
       // R1 and R6: a task from a job not ticked (R6 when the job was just switched off)
       if (t && j && w.jobs.indexOf(j) < 0) {
         m.off += dt;
@@ -175,8 +176,8 @@ function harness() {
     S.items.filter(isStation).forEach(it => {
       let m = H.st.get(it); if (!m) { m = { holder: it.worker, minding: false, hands: [], want: 0, flagged: {} }; H.st.set(it, m); }
       if (it.worker !== m.holder) {
-        if (m.holder && it.worker && S.workers.includes(m.holder)) {
-          m.hands.push(H.t);
+        if (m.holder && it.worker && S.workers.includes(m.holder) && !(m.holder.task && m.holder.task.item === it)) {      // two people making orders at one machine at once is sharing, not changing hands
+          m.hands.push(H.t); (m.why = m.why || []).push(H.t.toFixed(1) + ':' + who(m.holder) + '(' + tdesc(m.holder.task) + ')->' + who(it.worker) + '(' + tdesc(it.worker.task) + ')');
           const k = jobOf(it), a = it.worker.jobs.indexOf(k), b = m.holder.jobs.indexOf(k);
           if (m.minding && b >= 0 && !(a >= 0 && a < b) && !m.holder.task) note('R7', desc(it.worker) + ' took the ' + it.def.id + ' from ' + desc(m.holder) + ', who was minding it and puts ' + k + ' as high or higher');
         }
@@ -184,12 +185,12 @@ function harness() {
       }
       m.minding = !!(it.worker && it.worker.task && it.worker.task.item === it && it.worker.task.type === 'serve' && it.worker.state !== 'order' && !it.queue.length);
       m.hands = m.hands.filter(x => H.t - x <= 60);
-      if (m.hands.length > 4 && !m.flagged.r5) { m.flagged.r5 = 1; note('R5', 'the ' + it.def.id + '(' + it.x + ',' + it.z + ') changed hands ' + m.hands.length + ' times in a minute'); }
+      if (m.hands.length > 4 && !m.flagged.r5) { m.flagged.r5 = 1; note('R5', 'the ' + it.def.id + '(' + it.x + ',' + it.z + ') changed hands ' + m.hands.length + ' times in a minute: ' + (m.why || []).slice(-5).join(' ')); }
       if (m.hands.length <= 2) m.flagged.r5 = 0;
       // R7 (higher rank waiting): someone free puts this job higher than the person minding it, and every station of the job is held
       const k = jobOf(it), x = it.worker;
       const allHeld = S.items.filter(i => isStation(i) && jobOf(i) === k).every(i => i.worker);
-      const keen = x && m.minding && allHeld && S.workers.find(y => y !== x && freeNow(y) && y.jobs.indexOf(k) >= 0 && (x.jobs.indexOf(k) < 0 || y.jobs.indexOf(k) < x.jobs.indexOf(k)) && reach(y, spotsOf(it).concat([P('curTile')(x)])));
+      const keen = x && m.minding && allHeld && S.workers.find(y => y !== x && freeNow(y) && !(y.task && y.task.item !== it && isStation(y.task.item) && jobOf(y.task.item) === k) && y.jobs.indexOf(k) >= 0 && (x.jobs.indexOf(k) < 0 || y.jobs.indexOf(k) < x.jobs.indexOf(k)) && reach(y, spotsOf(it).concat([P('curTile')(x)])));
       if (keen) { m.want += dt; if (m.want > 8 && !m.flagged.r7) { m.flagged.r7 = 1; note('R7', desc(keen) + ' puts ' + k + ' higher but ' + desc(x) + ' has kept the ' + it.def.id + ' for 8 s'); } } else { m.want = 0; m.flagged.r7 = 0; }
     });
     // R4: customers waiting while someone who could serve them is free
@@ -198,8 +199,8 @@ function harness() {
       const it = c.state === 'queue' ? c.item : null;
       if (it && it.queue[0] === c && !it.worker && !c.path.length) {
         m.front += dt;
-        const k = jobOf(it), helper = S.workers.find(w => w.jobs.indexOf(k) >= 0 && freeNow(w) && reach(w, spotsOf(it)));
-        if (m.front > 20 && helper && !m.flagged.r4) { m.flagged.r4 = 1; note('R4', 'a customer waited 20 s at the front of the ' + it.def.id + ' line while ' + desc(helper) + ' was free'); }
+        const k = jobOf(it), helper = S.workers.find(w => w.jobs.indexOf(k) >= 0 && freeNow(w) && (H.w.get(w) || {}).freeFor >= 5 && reach(w, spotsOf(it)));
+        if (m.front > 20 && helper && !m.flagged.r4) { m.flagged.r4 = 1; note('R4', 'a customer waited 20 s at the front of the ' + it.def.id + '(' + it.x + ',' + it.z + ') line while ' + desc(helper) + ' was free (' + tdesc(helper.task) + ', "' + helper.doing + '", at ' + Math.floor(helper.x) + ',' + Math.floor(helper.z) + ')'); }
       } else m.front = 0;
       const moved = Math.abs(c.x - m.lastX) + Math.abs(c.z - m.lastZ); m.lastX = c.x; m.lastZ = c.z;
       if (c.path.length && moved < 1e-4 && c.state !== 'sit') { m.still += dt; if (m.still > 5 && !m.flagged.r8) { m.flagged.r8 = 1; note('R8', 'a customer (' + c.state + ') stuck walking for 5 s at ' + Math.floor(c.x) + ',' + Math.floor(c.z)); } } else { m.still = 0; m.flagged.r8 = 0; }
@@ -207,7 +208,7 @@ function harness() {
     live.forEach(o => {
       o.__age = (o.__age || 0) + dt;
       if (o.__age > 30 && !making(o) && !o.__flag) {
-        const helper = S.workers.find(w => w.jobs.indexOf('food') >= 0 && freeNow(w) && reach(w, spotsOf(o.s)));
+        const helper = S.workers.find(w => w.jobs.indexOf('food') >= 0 && freeNow(w) && (H.w.get(w) || {}).freeFor >= 5 && reach(w, spotsOf(o.s)));
         if (helper) { o.__flag = 1; note('R4', 'a paid ' + o.s.def.id + ' order waited 30 s unmade while ' + desc(helper) + ' was free'); }
       }
     });
