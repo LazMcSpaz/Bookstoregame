@@ -338,6 +338,36 @@ console.log('Checking ' + path.relative(process.cwd(), HTML) + '\n');
   errorsSeen.push(...g.errors); await g.close();
 }
 
+/* ---------- 3b. an older shop where Cash register covered the order point and nobody had Food ---------- */
+{
+  console.log('\n3b. An old save with an order point and nobody on Food');
+  const raw = fs.readFileSync(path.join(here, 'fixtures', 'save-4dedba2-orderpoint-no-food.json'), 'utf8');
+  const old = JSON.parse(raw);
+  const savedJobs = old.s.jobs.map(j => j.join('>'));
+  let g = await shop({ save: raw });
+  const got = await g.ev(() => window.T.jobs());
+  check('setup: the old save has an order point, people on Cash register, and nobody on Food', old.i.some(a => a[0] === 'orderpoint') && J(savedJobs) === J(['till>stock', 'stock', 'till']) && !('jv' in old.s), 'saved jobs: ' + J(savedJobs));
+  check('on loading, everyone with Cash register gets Food right after it; nobody else changes', J(got) === J(['till>food>stock', 'stock', 'till>food']), 'loaded jobs: ' + J(got));
+  // it happens once: the game writes the shop back as a new save straight away, and a new save is left alone
+  await g.page.waitForTimeout(600);
+  const kept = JSON.parse(await g.ev(k => localStorage.getItem(k), SAVE_KEY));
+  check('the shop is written back as a new save without waiting for the player', kept.s.jv >= 1 && J(kept.s.jobs.map(j => j.join('>'))) === J(got), 'stored jobs: ' + J(kept.s.jobs) + ' | new-save marker (jv): ' + kept.s.jv);
+  const r = await g.ev(() => { window.__shop.setBuild(false); return window.T.run(120); });
+  check('the café keeps selling in that shop', r.sold.coffee > old.s.stats.coffee && (r.hold.orderpoint || []).some(x => x > 0), 'coffee sold ' + r.sold.coffee + ' (was ' + old.s.stats.coffee + ') | seconds holding the order point: ' + J(r.hold.orderpoint));
+  await g.ev(() => { window.T.setJobs([['till', 'stock'], ['stock'], ['till']]); window.__shop.peek('saveNow')(); });      // the player takes Food off everyone again
+  await g.reload();
+  const again = await g.ev(() => window.T.jobs());
+  check('a shop saved after the change is left alone, even with nobody on Food', J(again) === J(['till>stock', 'stock', 'till']), 'jobs after the player removed Food, saved and reloaded: ' + J(again));
+  errorsSeen.push(...g.errors); await g.close();
+
+  // the same old save with the order point taken out: nothing to fix, so nothing changes
+  const plain = JSON.parse(raw); plain.i = plain.i.filter(a => a[0] !== 'orderpoint');
+  g = await shop({ save: JSON.stringify(plain) });
+  const same = await g.ev(() => window.T.jobs());
+  check('an old save with no order point keeps its jobs exactly', J(same) === J(savedJobs), 'loaded jobs: ' + J(same));
+  errorsSeen.push(...g.errors); await g.close();
+}
+
 /* ---------- 4. the Café Order Point belongs to the Food job ---------- */
 {
   console.log('\n4. The Caf\u00e9 Order Point is part of the Food job');
