@@ -1996,16 +1996,22 @@ var DEFS=[
       b.box(1.92,0.32,0.62,'#5c392c',0,0.16,0.02); b.rb(0.95,0.06,0.3,c[0],0,0.36,0.04,6);
       b.box(1.92,0.75,0.16,'#5c392c',0,0.66,-0.37); for(var k=0;k<4;k++)b.rb(0.22,0.3,0.06,c[k%2],-0.72+k*0.48,0.7,-0.27,6);
       b.box(1.96,0.06,0.2,'#7d5140',0,1.04,-0.37); g.add(b.mesh());}},
-  {id:'eggchair',name:'Egg Chair',tab:'Mid-century',cost:65,level:3,cozy:5,layer:'solid',w:1,d:1,h:1.45,role:'seat',seats:1,seatY:0.3,fwd:0.04,tip:3,variants:3,
-    build:function(g,st,v){var c=['#efe4cf','#d9a02b','#2f7f86'][v],b=new Builder(),pts=[];
-      b.disc(0.3,0.3,0.05,'#3b2c40',0,0.025,-0.24);      // a round base behind, an arched stand curving over the top
-      for(var k=0;k<=10;k++){var a=k/10*Math.PI*0.62;pts.push([0,0.05+Math.sin(a)*1.28,-0.3+(1-Math.cos(a))*0.0-Math.sin(a*0.8)*0.06+(k>6?(k-6)*0.075:0)]);}
-      for(var k2=0;k2<pts.length-1;k2++)b.bar(0.028,0.028,'#3b2c40',0,pts[k2][1],pts[k2][2],0,pts[k2+1][1],pts[k2+1][2],8);
-      var top=pts[pts.length-1];b.bar(0.008,0.008,'#8d7f8c',0,top[1],top[2],0,1.1,0.0,4);b.ball(0.025,'#3b2c40',0,1.1,0.0);
-      b.ell(0.25,0.07,0.22,c,0,0.28,0.04); b.ell(0.21,0.19,0.07,c,0,0.5,-0.17); b.ell(0.09,0.07,0.05,'#ffffff',0.08,0.42,-0.08);      // cushions
+  {id:'eggchair',name:'Egg Chair',tab:'Mid-century',cost:65,level:3,cozy:5,layer:'solid',w:1,d:1,h:1.68,role:'seat',seats:1,seatY:0.16,fwd:0.08,tip:3,variants:3,
+    // A hanging egg: the shell is sized round a seated person (the widest hair is 0.85 across, the tallest head 1.23 up), and the stand goes round the outside of it.
+    egg:{a:0.46,b:0.7,y:0.78,z:0.04},      // the shell: half-width, half-height, height of its middle, how far forward its middle sits
+    build:function(g,st,v){var c=['#efe4cf','#d9a02b','#2f7f86'][v],b=new Builder(),E=this.egg,pts=[],k,dark='#3b2c40';
+      b.disc(0.3,0.3,0.05,dark,0,0.025,-0.2);      // a round base under the back of the egg
+      // the stand: up from the base, round behind the egg and over its top, always 5cm clear of the shell, ending above the crown
+      for(k=0;k<=16;k++){var a=(-58+k/16*148)*Math.PI/180;pts.push([E.y+Math.sin(a)*(E.b+0.16),E.z-Math.cos(a)*(E.a+0.05)]);}
+      for(k=0;k<pts.length-1;k++)b.bar(0.026,0.026,dark,0,pts[k][0],pts[k][1],0,pts[k+1][0],pts[k+1][1],8);
+      var top=pts[pts.length-1],crown=E.y+E.b;
+      b.bar(0.008,0.008,'#8d7f8c',0,top[0],top[1],0,crown,E.z,4);b.ball(0.03,'#8d7f8c',0,crown+0.005,E.z);      // the chain it hangs by, and the ring on the crown
+      b.ell(0.25,0.055,0.24,c,0,0.26,E.z+0.01); b.ell(0.2,0.15,0.045,c,0,0.6,E.z-0.35); b.ell(0.08,0.065,0.04,'#ffffff',0.12,0.46,E.z-0.28);      // cushions, all inside the shell: seat, back, a small pillow
       g.add(b.mesh());
       if(!EGG_MAT){var tx=canvasTex(64,64,function(x,w,h){x.fillStyle='#c9a46a';x.fillRect(0,0,w,h);x.strokeStyle='#a07a42';x.lineWidth=3;for(var i=0;i<8;i++){x.beginPath();x.moveTo(0,i*8+4);x.lineTo(w,i*8+4);x.stroke();}x.strokeStyle='#dcbf86';x.lineWidth=1.5;for(var j=0;j<8;j++){x.beginPath();x.moveTo(j*8,0);x.lineTo(j*8,h);x.stroke();}});tx.wrapS=tx.wrapT=T.RepeatWrapping;tx.repeat.set(4,3);EGG_MAT=toon({map:tx,side:T.DoubleSide});}
-      var shell=new T.Mesh(new T.SphereGeometry(0.4,20,14,Math.PI/2+0.9,Math.PI*2-1.8,0.12,Math.PI-0.12),EGG_MAT);shell.scale.set(1,1.15,1);shell.position.set(0,0.62,0.0);shell.castShadow=true;g.add(shell);}},
+      // the shell in three pieces: the body with a 115-degree opening at the front, a crown over the opening, and a low lip under it (legs go over the lip)
+      var open=2.0,parts=[[Math.PI/2+open/2,Math.PI*2-open,0.02,Math.PI-0.04],[Math.PI/2-open/2,open,0.02,0.6],[Math.PI/2-open/2,open,Math.PI-0.5,0.48]];
+      parts.forEach(function(q){var m=new T.Mesh(new T.SphereGeometry(1,q[1]>3?24:10,q[3]>2?16:6,q[0],q[1],q[2],q[3]),EGG_MAT);m.scale.set(E.a,E.b,E.a);m.position.set(0,E.y,E.z);m.castShadow=true;m.userData.eggShell=true;g.add(m);});}},
   {id:'chaise',name:'Chaise Longue',tab:'Old Library',cost:75,level:5,cozy:6,layer:'solid',w:2,d:1,h:0.75,role:'seat',seats:1,seatY:0.22,fwd:0.02,tip:3,variants:3,
     build:function(g,st,v){var c=OL_SOFT[v],w=OL_WOOD[0],b=new Builder();
       b.rb(0.9,0.09,0.3,c,0.05,0.28,0.02,6); [-0.82,0.82].forEach(function(x){[-0.22,0.22].forEach(function(z){b.cyl(0.03,0.02,0.2,w[1],x,0.1,z,6);});});
