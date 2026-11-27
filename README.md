@@ -10,6 +10,9 @@ A cozy portrait mobile browser game: design and run a bookstore and café on a g
 
 It opens full screen like an app. After the first visit it also works offline.
 
+## Sound
+The game's music and sounds are meant to play alongside whatever the phone is already playing (music, a podcast, a video in another app) without stopping it. On an iPhone they follow the ring/silent switch, like most games. Music and Sounds each have a switch in the ? menu; with both off the game does not use the phone's sound at all.
+
 ## Files
 - `index.html` is the whole game. It loads three.js r128 from cdnjs.
 - `models.json` holds the furniture models.
