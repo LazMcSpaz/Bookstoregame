@@ -4762,8 +4762,43 @@ function updatePointer(now){
   var arrow=!!el&&kind!=='card'&&kind!=='act'&&kind!=='buy';
   pt.classList.toggle('on',arrow);
   if(!arrow)return;
-  var a=$('app').getBoundingClientRect(),r=el.getBoundingClientRect(),cx=r.left+r.width/2-a.left,up=r.top+r.height/2<a.top+a.height*0.45;
-  pt.style.transform='translate('+clamp(cx,26,a.width-26)+'px,'+((up?r.bottom+30:r.top-30)-a.top)+'px) rotate('+(up?180:0)+'deg)';
+  var a=$('app').getBoundingClientRect(),r=el.getBoundingClientRect(),key=[kind,Math.round(r.left),Math.round(r.top),Math.round(r.width),Math.round(r.height),Math.round(a.width)].join(',');
+  if(el!==ptAim.el||key!==ptAim.key||now-ptAim.t>400)ptAim={el:el,key:key,t:now,at:aimPointer(a,r,kind==='job')};      // words on the screen change, so look again a few times a second
+  var p=ptAim.at;
+  pt.style.transform='translate('+(p.x-a.left)+'px,'+(p.y-a.top)+'px) rotate('+p.rot+'deg)'+(p.k!==1?' scale('+p.k+')':'');
+}
+// Where the arrow goes: beside the thing to tap, pointing at it, in the first of these places where it covers no words:
+// above or below as before (over its middle, else over either end), then the other of those two, then right, then left, then tucked small into the thing's top edge.
+// For a row in a list the tucked place comes first: every other place sits on a neighbouring row.
+var ptAim={el:null,key:'',t:0,at:null};
+function aimPointer(a,r,row){
+  var cx=clamp(r.left+r.width/2,a.left+26,a.right-26),cy=r.top+r.height/2,up=cy<a.top+a.height*0.45;
+  var xs=r.width>60?[cx,r.left+20,r.right-20]:[cx],tries=[];      // over the middle of it, or over either end
+  function col(under){xs.forEach(function(x){tries.push(under?{x:x,y:r.bottom+30,rot:180,k:1}:{x:x,y:r.top-30,rot:0,k:1});});}
+  var tuck={x:cx,y:r.top+7,rot:0,k:0.8};
+  if(row)tries.push(tuck);      // a row in a list: anywhere outside it sits on the row next door, so tuck it in first
+  col(up);col(!up);
+  tries.push({x:r.right+30,y:cy,rot:90,k:1},{x:r.left-30,y:cy,rot:-90,k:1},tuck);
+  for(var i=0;i<tries.length;i++){var q=tries[i];if(q.x<a.left+24||q.x>a.right-24||q.y<a.top+24||q.y>a.bottom-24)continue;if(!wordsUnder(pointerBox(q)))return q;}
+  return tries[0];
+}
+function pointerBox(q){      // the strip the arrow sweeps as it bobs: 6px back from its tip's direction, 2px forward
+  var h=18*q.k,b=6*q.k,f=2*q.k;
+  return q.rot===0?{l:q.x-h,r:q.x+h,t:q.y-22*q.k-b,b:q.y+22*q.k+f}:q.rot===180?{l:q.x-h,r:q.x+h,t:q.y-22*q.k-f,b:q.y+22*q.k+b}:q.rot===90?{l:q.x-22*q.k-f,r:q.x+22*q.k+b,t:q.y-h,b:q.y+h}:{l:q.x-22*q.k-b,r:q.x+22*q.k+f,t:q.y-h,b:q.y+h};
+}
+function wordsUnder(B){      // are any words that can be seen inside this box?
+  var w=document.createTreeWalker($('app'),NodeFilter.SHOW_TEXT),n,rg=document.createRange(),pt=$('point');
+  while((n=w.nextNode())){
+    var par=n.parentElement;if(!par||!/\S/.test(n.nodeValue)||pt.contains(par))continue;
+    rg.selectNodeContents(n);var rs=rg.getClientRects();
+    for(var i=0;i<rs.length;i++){
+      var l=Math.max(B.l,rs[i].left),r=Math.min(B.r,rs[i].right),t=Math.max(B.t,rs[i].top),b=Math.min(B.b,rs[i].bottom);
+      if(r-l<1||b-t<1)continue;
+      var top=document.elementFromPoint((l+r)/2,(t+b)/2);      // only words on top count: not ones behind a sheet
+      if(top&&(top===par||par.contains(top)||top.contains(par)))return true;
+    }
+  }
+  return false;
 }
 $('guideNext').addEventListener('click',function(){
   var ph=tutPhase();
