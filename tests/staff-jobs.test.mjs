@@ -1,4 +1,4 @@
-// Staff jobs check. Run from the repo:  node tests/staff-jobs.test.mjs   (add --html <file> to check another copy of index.html)
+// Staff jobs check. Run from the repo:  node tests/staff-jobs.test.mjs   (add --html <file> to check another copy of index.html, --only 4b,6 for some parts)
 // Needs Playwright and Chrome. With no internet, point THREE_JS at a local copy of three.js r128 (three.min.js).
 //
 // It opens the real page in headless Chrome, builds a small shop, changes jobs by tapping the rows of the jobs screen,
@@ -107,6 +107,31 @@ function helpers() {
     out.sold = { books: S.state.stats.books, coffee: S.state.stats.coffee };
     return out;
   };
+  T.cafe = () => { const c = P('spawnCustomer')(); c.after = cc => { cc.plan = ['snack']; P('nextIntent')(cc); }; return c; };      // someone who walks in wanting a coffee
+  // Step the clock and follow every café order: when it was paid for, when someone started making it, when it was handed over.
+  // `arrive` is a list of seconds at which a coffee customer walks in. Also notes each member of staff's seconds with nothing to do while a paid order sat unmade.
+  T.orders = (secs, arrive) => {
+    const dt = 0.05, seen = new Map(), who = x => S.workers.indexOf(x), idleWhileWaiting = S.workers.map(() => 0), gave = new Set(), log = [];
+    let next = 0, t = 0; const last = S.workers.map(w => w.task);
+    for (let k = 0; k < secs / dt; k++) {
+      while (arrive && next < arrive.length && t >= arrive[next]) { T.cafe(); next++; }
+      S.simulate(dt); t += dt;
+      P('orders').forEach(o => { if (!seen.has(o)) seen.set(o, { paid: t, start: null, by: -1, done: null }); });
+      seen.forEach((r, o) => {
+        if (r.start == null && o.w && o.w.task && o.w.task.order === o) { r.start = t; r.by = who(o.w); }
+        if (r.done == null && (o.done || o.ready)) r.done = t;
+      });
+      const unmade = [...seen.entries()].some(([o, r]) => r.done == null && !(o.w && o.w.task && o.w.task.order === o) && S.customers.includes(o.c));
+      S.workers.forEach((w, i) => {
+        if (w.task !== last[i]) { log.push(t.toFixed(1) + ' ' + i + ':' + (w.task ? w.task.type + '@' + w.task.item.def.id : 'none')); last[i] = w.task; }
+        const free = !w.task || (w.task.type === 'serve' && !w.task.item.queue.length && w.state !== 'order');
+        if (unmade && free && w.jobs.indexOf('food') >= 0) idleWhileWaiting[i] += dt;
+      });
+      S.customers.forEach(c => { if (c.gaveUp) gave.add(c.id); });
+    }
+    const rows = [...seen.values()].map(r => ({ paid: +r.paid.toFixed(1), waitedToStart: r.start == null ? null : +(r.start - r.paid).toFixed(1), by: r.by, done: r.done == null ? null : +r.done.toFixed(1) }));
+    return { orders: rows, idleWhileWaiting: idleWhileWaiting.map(x => +x.toFixed(1)), gaveUp: gave.size, log };
+  };
   T.holder = id => { const it = T.find(id); return it && it.worker ? S.workers.indexOf(it.worker) : -1; };
   T.rows = () => [...document.querySelectorAll('#mgmtBody .jrow')].map(r => r.dataset.k + ':' + (r.querySelector('.jbox').textContent || '-')).join(' ');
   T.rowNotes = () => { const o = {}; document.querySelectorAll('#mgmtBody .jrow').forEach(r => { const i = r.querySelector('.info i'); o[r.dataset.k] = i ? i.textContent : ''; }); return o; };
@@ -137,6 +162,8 @@ async function hireTwo(g) {      // hire() is what the Hire button calls; it ope
   for (let i = 0; i < 2; i++) { await g.ev(() => window.__shop.hire()); await tap(g, '#mgmtClose'); }
 }
 
+const onlyArg = argv.indexOf('--only') >= 0 ? argv[argv.indexOf('--only') + 1].split(',') : null;      // --only 4b,6 runs just those numbered parts
+const want = id => !onlyArg || onlyArg.indexOf(id) >= 0;
 let failed = 0, passed = 0;
 function check(name, ok, detail) {
   if (ok) passed++; else failed++;
@@ -148,7 +175,7 @@ const errorsSeen = [];
 console.log('Checking ' + path.relative(process.cwd(), HTML) + '\n');
 
 /* ---------- 1. the job a player taps is the job that person does first ---------- */
-{
+if (want('1')) {
   console.log('1. Tapping a job on the jobs screen');
   const g = await shop();
   await g.ev(() => window.T.build({ shelfStock: 1 }));
@@ -183,7 +210,7 @@ console.log('Checking ' + path.relative(process.cwd(), HTML) + '\n');
 }
 
 /* ---------- 2. the order of jobs decides who gets a station, not who got there first ---------- */
-{
+if (want('2')) {
   console.log('\n2. Who gets the coffee machine and the register');
   const g = await shop();
   await g.ev(() => { window.T.build(); window.T.doors(false); });      // shelves full and no customers yet: nothing to do but wait at a station
@@ -235,7 +262,7 @@ console.log('Checking ' + path.relative(process.cwd(), HTML) + '\n');
 }
 
 /* ---------- 2b. people on the same job spread out over its stations ---------- */
-{
+if (want('2b')) {
   console.log('\n2b. Two people on one job');
   // counts the seconds each person holds each station, how often a station changes hands, and how often someone minding one is pushed off it by a colleague
   const watch = (g, ids, secs) => g.ev(([ids, secs]) => {
@@ -322,7 +349,7 @@ console.log('Checking ' + path.relative(process.cwd(), HTML) + '\n');
 }
 
 /* ---------- 3. a save made before this change still loads ---------- */
-{
+if (want('3')) {
   console.log('\n3. A save written by the old version (commit 4dedba2)');
   const raw = fs.readFileSync(path.join(here, 'fixtures', 'save-4dedba2.json'), 'utf8');
   const old = JSON.parse(raw);
@@ -339,7 +366,7 @@ console.log('Checking ' + path.relative(process.cwd(), HTML) + '\n');
 }
 
 /* ---------- 3b. an older shop where Cash register covered the order point and nobody had Food ---------- */
-{
+if (want('3b')) {
   console.log('\n3b. An old save with an order point and nobody on Food');
   const raw = fs.readFileSync(path.join(here, 'fixtures', 'save-4dedba2-orderpoint-no-food.json'), 'utf8');
   const old = JSON.parse(raw);
@@ -369,7 +396,7 @@ console.log('Checking ' + path.relative(process.cwd(), HTML) + '\n');
 }
 
 /* ---------- 4. the Café Order Point belongs to the Food job ---------- */
-{
+if (want('4')) {
   console.log('\n4. The Caf\u00e9 Order Point is part of the Food job');
   // a cash register and an order point: one person on Cash register only, one on Food only, one restocking
   let g = await shop();
@@ -406,7 +433,7 @@ console.log('Checking ' + path.relative(process.cwd(), HTML) + '\n');
 }
 
 /* ---------- 5. the jobs lesson in the first steps ---------- */
-{
+if (want('5')) {
   console.log('\n5. The jobs lesson in the first steps');
   // follow the pointer the way a new player does; with swap, tap the two jobs the other way round
   const lesson = async swap => {
@@ -434,6 +461,78 @@ console.log('Checking ' + path.relative(process.cwd(), HTML) + '\n');
   check('following the pointer ends with Cash register first, Restocking second, and the lesson done', o.jobs === 'till>stock' && o.past, 'jobs: ' + o.jobs + ' | pointer said: ' + J(o.said));
   o = await lesson(true);
   check('tapping the two the other way round still ends with Cash register first', o.jobs === 'till>stock' && o.past, 'jobs: ' + o.jobs + ' | pointer said: ' + J(o.said));
+}
+
+/* ---------- 7. the person on Food takes the payments and makes what was paid for ---------- */
+if (want('7')) {
+  console.log('\n7. Food first, Cash register second: payments, then the coffee');
+  // a register, an order point and a coffee machine; the owner on Cash register and Restocking, helper 1 on Food then Cash register
+  let g = await shop();
+  await g.ev(() => { window.T.build({ orderpoint: true }); window.T.doors(false); });
+  await hireTwo(g);
+  await g.ev(() => { window.T.setJobs([['till', 'stock'], ['food', 'till'], []]); window.T.run(6); });
+  let r = await g.ev(() => window.T.orders(90, [0, 0.6, 1.2]));      // three people come in for coffee together
+  const firstMake = Math.min(...r.orders.filter(o => o.waitedToStart != null).map(o => o.paid + o.waitedToStart));
+  const paidBefore = r.orders.filter(o => o.paid <= firstMake).length;
+  check('three people come in for coffee together: she takes all three payments before she leaves the order point', r.orders.length === 3 && paidBefore === 3, 'orders paid for before she first went to the machine: ' + paidBefore + ' of ' + r.orders.length + ' | her tasks: ' + r.log.filter(l => / 1:/.test(l)).slice(0, 8).join(', '));
+  check('then she makes all three and nobody gives up', r.orders.length === 3 && r.orders.every(o => o.by === 1 && o.done != null) && r.gaveUp === 0, 'orders: ' + J(r.orders) + ' | gave up: ' + r.gaveUp);
+  check('she never stands with nothing to do while a paid order sits unmade', r.idleWhileWaiting[1] <= 2, 'seconds like that [owner, helper 1, helper 2]: ' + J(r.idleWhileWaiting));
+  errorsSeen.push(...g.errors); await g.close();
+
+  // a steady line: someone new every three seconds. A paid order must not wait for the whole line to be rung up.
+  g = await shop();
+  await g.ev(() => { window.T.build({ orderpoint: true }); window.T.doors(false); });
+  await hireTwo(g);
+  await g.ev(() => { window.T.setJobs([['till', 'stock'], ['food', 'till'], []]); window.T.run(6); });
+  r = await g.ev(() => window.T.orders(150, [0, 3, 6, 9, 12, 15, 18, 21]));
+  const waits = r.orders.map(o => o.waitedToStart);
+  check('a steady line at the order point: she breaks off to make an order once it has waited about 12 seconds', r.orders.length >= 6 && waits[0] != null && waits[0] >= 6 && waits[0] <= 16, 'seconds each paid order waited before she started on it: ' + J(waits));
+  check('and everyone in that line gets their coffee', r.orders.every(o => o.done != null) && r.gaveUp === 0, r.orders.length + ' orders, ' + r.orders.filter(o => o.done != null).length + ' handed over | gave up: ' + r.gaveUp);
+  errorsSeen.push(...g.errors); await g.close();
+
+  // a coffee machine in a corner with one tile to work it from, and a colleague with nothing to do standing on that tile
+  const corner = async () => {
+    const g = await shop();
+    await g.ev(() => {
+      const T = window.T, S = window.__shop;
+      T.put('counter', 0, 2); T.put('counter', 0, 3); T.put('espresso', 0, 3, 1, 10); T.put('counter', 0, 4);      // the machine faces into the room, back to the wall, a counter each side
+      T.put('counter', 2, 4); T.put('orderpoint', 2, 4, 0); T.put('counter', 5, 5); T.put('register', 5, 5, 0);      // the order point beside it: she stands at 2,3, next to the machine's tile
+      [[7, 6, 3], [7, 7, 3]].forEach(q => T.put('shelf', q[0], q[1], q[2], 6, 0));
+      S.state.stock.romance = 400; S.state.stock.coffee = 400; S.state.coins = 5000; S.setLevelXP(999999); S.peek('level=levelFor(xpTotal())');
+      S.setBuild(false); T.doors(false);
+    });
+    await hireTwo(g);
+    return g;
+  };
+  g = await corner();
+  const spots = await g.ev(() => { const sp = window.__shop.peek('staffSpots')(window.T.find('espresso')); return sp[0].concat(sp[1]).map(t => t.x + ',' + t.z); });
+  await g.ev(() => {
+    const S = window.__shop, T = window.T, P = S.peek;
+    T.setJobs([['till', 'stock'], ['food', 'till'], ['stock']]); T.run(6);
+    const b = S.workers[2]; P('freeTile')(b); b.x = 1.5; b.z = 3.5; b.path = []; b.resKey = '1,3'; S.tileRes.set('1,3', b);      // helper 2 (Restocking only, shelves full) is standing at the machine
+  });
+  r = await g.ev(() => window.T.orders(70, [0, 1]));
+  const still = await g.ev(() => { const b = window.__shop.workers[2]; return Math.floor(b.x) + ',' + Math.floor(b.z); });
+  check('setup: the coffee machine can be worked from one tile only', J(spots) === J(['1,3']), 'tiles the machine can be worked from: ' + J(spots));
+  check('a colleague with nothing to do is standing on that tile: he steps off it and she makes the coffee', still !== '1,3' && r.orders.length === 2 && r.orders.every(o => o.done != null && o.by === 1) && r.gaveUp === 0,
+    'helper 2 ended at tile ' + still + ' | orders: ' + J(r.orders) + ' | gave up: ' + r.gaveUp);
+  errorsSeen.push(...g.errors); await g.close();
+
+  // the same corner: someone who has paid looks for a place to wait sixty times over. Never the tile she works from, never where a line forms.
+  g = await corner();
+  await g.ev(() => { window.T.setJobs([['till', 'stock'], ['food', 'till'], []]); window.T.run(6); });
+  const waits2 = await g.ev(() => {
+    const S = window.__shop, T = window.T, P = S.peek, line = new Set();
+    S.items.filter(i => i.def.role === 'counter' || i.def.role === 'snack').forEach(st => P('queueSlots')(st).forEach(q => line.add(q.x + ',' + q.z)));
+    const c = T.cafe(); for (let k = 0; k < 600 && !c.awaiting; k++) S.simulate(0.05);
+    const went = {};
+    for (let n = 0; n < 60; n++) { P('loiter')(c); went[c.resKey] = (went[c.resKey] || 0) + 1; }
+    const keys = Object.keys(went);
+    return { paid: !!c.awaiting, places: keys.length, onWorkTile: keys.filter(k => k === '1,3'), inLine: keys.filter(k => line.has(k)) };
+  });
+  check('someone who has paid picks a place to wait, sixty times: never the tile the machine is worked from, never a tile where a line forms', waits2.paid && waits2.places >= 3 && !waits2.onWorkTile.length && !waits2.inLine.length,
+    'different places picked: ' + waits2.places + ' | on the machine\'s tile: ' + J(waits2.onWorkTile) + ' | on a line\'s tiles: ' + J(waits2.inLine));
+  errorsSeen.push(...g.errors); await g.close();
 }
 
 console.log('');

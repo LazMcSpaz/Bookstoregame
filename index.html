@@ -3360,7 +3360,14 @@ function arriveShelf(c){
 // --- lines: customers queue in single file, one tile each, and shuffle forward as the line moves ---
 var PATIENCE=45;
 // the tile behind each register or machine belongs to whoever works it: customers never line up there
-var staffOnly={v:-1,k:{}};
+var staffOnly={v:-1,k:{}},workOnly={v:-1,k:{}};
+// the tiles a station is worked from: behind it (a fridge: its door side) when that is open floor, otherwise whichever of its sides are (a machine with its back to a wall).
+// Nobody waits or stands about on these: staff with nothing in hand step off them, and customers waiting for an order keep clear.
+function workTiles(){
+  if(workOnly.v!==layoutVersion){workOnly={v:layoutVersion,k:{}};stations().forEach(function(o){var sp=staffSpots(o);(sp[0].length?sp[0]:sp[1]).forEach(function(t){workOnly.k[key(t)]=1;});});}
+  return workOnly.k;
+}
+function busyTiles(){var k={},w=workTiles(),n;for(n in w)k[n]=1;stations().forEach(function(s){queueSlots(s).forEach(function(q){k[key(q)]=1;});});return k;}      // work tiles and the tiles lines form on
 function staffTiles(){
   if(staffOnly.v!==layoutVersion){staffOnly={v:layoutVersion,k:{}};stations().forEach(function(o){var f=frontOf(o.rot);staffOnly.k[(o.x-f.dx)+','+(o.z-f.dz)]=1;});}
   return staffOnly.k;
@@ -3455,8 +3462,8 @@ function orderAtTill(c,s){      // queue at the register, pay there, then sit or
   return false;
 }
 function loiter(c){      // no seat: stand somewhere out of the way until the order comes
-  var t0=curTile(c),spots=[];
-  for(var dz=-3;dz<=3;dz++)for(var dx=-3;dx<=3;dx++){var t={x:t0.x+dx,z:t0.z+dz},d=Math.abs(dx)+Math.abs(dz);if(d>=2&&walkable(t.x,t.z)&&inShop(t.x,t.z))spots.push(t);}
+  var t0=curTile(c),spots=[],busy=busyTiles();
+  for(var dz=-3;dz<=3;dz++)for(var dx=-3;dx<=3;dx++){var t={x:t0.x+dx,z:t0.z+dz},d=Math.abs(dx)+Math.abs(dz);if(d>=2&&walkable(t.x,t.z)&&inShop(t.x,t.z)&&!busy[key(t)])spots.push(t);}
   spots=shuffle(spots);
   var then=function(cc){cc.state='waitOrder';cc.timer=ORDER_WAIT;cc.after=function(q){if(q.awaiting){q.awaiting=false;q.gaveUp=true;floater('Too slow',q.x,q.y+1.5,q.z,'miss');}nextIntent(q);};};
   if(!goTo(c,spots.slice(0,10),then)){then(c);}else c.state='toWait';
@@ -3478,8 +3485,8 @@ function signWords(a,b2,col){return canvasTex(160,110,function(x,w,h){x.fillStyl
 function pickupShow(pk){var n=orders.filter(function(o){return o.ready&&!o.done&&o.pickup===pk;}).length;if(pk.group)for(var k=0;k<3;k++){var m=pk.group.userData['cup'+k];if(!m)pk.group.traverse(function(o){if(o.userData['cup'+k])m=o.userData['cup'+k];});if(m)m.visible=k<n;}}
 function pickupFor(){var ps=items.filter(function(i){return i.def.pickup&&i.alive&&queueSlots(i).length;});return ps.length?pick(ps):null;}
 function waitNear(c,pk){      // hang about near the pickup spot until the order is up
-  var a=accessSets(pk),base=a[0].concat(a[1])[0]||curTile(c),spots=[];
-  for(var dz=-2;dz<=2;dz++)for(var dx=-2;dx<=2;dx++){var t={x:base.x+dx,z:base.z+dz};if((dx||dz)&&walkable(t.x,t.z)&&inShop(t.x,t.z))spots.push(t);}
+  var a=accessSets(pk),base=a[0].concat(a[1])[0]||curTile(c),spots=[],busy=busyTiles();
+  for(var dz=-2;dz<=2;dz++)for(var dx=-2;dx<=2;dx++){var t={x:base.x+dx,z:base.z+dz};if((dx||dz)&&walkable(t.x,t.z)&&inShop(t.x,t.z)&&!busy[key(t)])spots.push(t);}
   var then=function(cc){cc.state='waitOrder';cc.timer=ORDER_WAIT;cc.after=function(q){if(q.awaiting){q.awaiting=false;q.gaveUp=true;floater('Too slow',q.x,q.y+1.5,q.z,'miss');}nextIntent(q);};};
   if(!goTo(c,shuffle(spots).slice(0,10),then))then(c);else c.state='toWait';
   c.redo=function(){waitNear(c,pk);};
@@ -3735,7 +3742,7 @@ function setTask(w,t){
     if(walkable(bt.x,bt.z)&&workerGo(w,[[bt],near])){t.phase='fetch';t.item.stocker=w;return true;}
     t.phase='carry';      // the door cannot be reached: carry on as if the books were to hand
   }
-  if(!workerGo(w,sets)){t.item.blockT=simT+2;carry(w,false);w.task=null;return false;}
+  if(!workerGo(w,sets)){t.item.blockT=simT+2;carry(w,false);if(t.order&&t.order.w===w)t.order.w=null;w.task=null;return false;}      // could not get there: the order goes back for anyone who can
   if(t.type==='stock')t.item.stocker=w;
   else{
     var x=t.item.worker;t.item.worker=w;
@@ -3778,14 +3785,22 @@ function canTake(it,w,k){      // minded by someone this job matters less to
   return !!x&&x!==w&&!it.stocker&&!blocked(it)&&minding(x,it)&&keener(w,x,k);
 }
 function spare(x){return !x.stuckT&&(!x.task||(x.task.type==='serve'&&!x.task.item.queue.length&&x.state!=='order'));}      // nothing in hand right now
-function orderFor(w){      // the next café order for w to make, unless someone better placed is free: they put Food higher, or put it as high and are already at that machine
-  var t=orderWork(w);if(!t)return null;
+function canStand(w,it){var sp=staffSpots(it);return sp[0].concat(sp[1]).some(function(t){var r=tileRes.get(key(t));return !r||r===w;});}      // is there a tile to work this station from that nobody else is on?
+function orderFor(w){      // the next café order for w to make, unless w has nowhere to stand at that machine, or someone better placed is free: they put Food higher, or put it as high and are already at that machine
+  var t=orderWork(w);if(!t||!canStand(w,t.item))return null;
   var r=w.jobs.indexOf('food'),there=!!w.task&&w.task.item===t.item;
-  return workers.some(function(x){var q=x.jobs.indexOf('food');return x!==w&&q>=0&&spare(x)&&(q<r||(q===r&&!there&&!!x.task&&x.task.item===t.item));})?null:t;
+  return workers.some(function(x){var q=x.jobs.indexOf('food');return x!==w&&q>=0&&spare(x)&&canStand(x,t.item)&&(q<r||(q===r&&!there&&!!x.task&&x.task.item===t.item));})?null:t;
+}
+// The Food job: people waiting to pay (at the order point, or at a machine in a shop without a till) are served first, then what has been paid for is made,
+// then machines are topped up. But a paid order that has waited ORDER_DUE seconds is made before the next payment is taken, so a long line cannot starve it.
+var ORDER_DUE=12;
+function foodWork(w){
+  var o=orderFor(w),st=stationWork(w,'food',false);
+  if(o&&simT-o.order.t>=ORDER_DUE)return o;
+  return st&&st.type==='serve'?st:o||st;
 }
 function stepAside(w){      // clear of every station's staff spot and every line, so whoever works there has room
-  var keep={},open=[];
-  stations().forEach(function(s){staffSpots(s)[0].concat(queueSlots(s)).forEach(function(q){keep[key(q)]=1;});});
+  var keep=busyTiles(),open=[];
   for(var z=0;z<D;z++)for(var x=0;x<W;x++)if(walkable(x,z)&&!keep[x+','+z]&&!(x===DOOR.x&&z===DOOR.z))open.push({x:x,z:z});
   return workerGo(w,[open]);
 }
@@ -3810,7 +3825,7 @@ function stockWork(w){
 }
 function dutyTask(w){
   var j=w.jobs,i,t;
-  for(i=0;i<j.length;i++){t=j[i]==='till'?(stationWork(w,'till',false)||(!hasJob('food')&&orderWork(w))):j[i]==='food'?(orderFor(w)||stationWork(w,'food',false)):stockWork(w);if(t)return t;}
+  for(i=0;i<j.length;i++){t=j[i]==='till'?(stationWork(w,'till',false)||(!hasJob('food')&&orderWork(w))):j[i]==='food'?foodWork(w):stockWork(w);if(t)return t;}
   for(i=0;i<j.length;i++)if(j[i]!=='stock'){t=stationWork(w,j[i],true);if(t)return t;}
   return null;
 }
@@ -3829,7 +3844,7 @@ function updateWorker(w,dt){
     w.think=0.3;
     if(!(t&&(t.type==='stock'||t.type==='make'||w.state==='order'))){      // never drop a shelf run or a sale half-way
       var n=dutyTask(w);
-      if(!n){if(t){setTask(w,null);t=null;}if(!w.path.length&&staffTiles()[key(curTile(w))])stepAside(w);}      // nothing to do: not in a staff spot
+      if(!n){if(t){setTask(w,null);t=null;}if(!w.path.length&&workTiles()[key(curTile(w))])stepAside(w);}      // nothing to do: not on a tile a station is worked from
       else if(!t||n.type!==t.type||n.item!==t.item){
         setTask(w,n);t=w.task;
         // could not get there: if they are walled in with no way to the door, they step out and come back in
