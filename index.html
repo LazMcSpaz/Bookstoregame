@@ -2642,7 +2642,7 @@ function tintGroup(g,kind){
 }
 
 /* ---------- game state ---------- */
-var state={coins:START_COINS,salesXP:0,bestValue:0,sales:0,wallCol:0,floor:0,stock:{},missed:{},hired:0,staffLooks:[],duties:[],jobs:null,floorMap:null,wallMap:null,started:false,name:'',staffNames:[],intro:0,outro:false,goal:0,gv:6,jv:1,rooms:[[0,0,6,7]],freeArch:0,bd:null,shopName:'',facade:0,fence:0,day:1,dayT:0,today:null,rating:null,dayOver:false,cat:null,genres:[0],sold:{},stats:{books:0,coffee:0,pastry:0,seated:0,orders:0,looks:0,walls:0,floors:0,doors:0,pets:0,bestDay:0}};
+var state={coins:START_COINS,salesXP:0,bestValue:0,sales:0,wallCol:0,floor:0,stock:{},missed:{},hired:0,staffLooks:[],duties:[],jobs:null,floorMap:null,wallMap:null,started:false,name:'',staffNames:[],intro:0,outro:false,goal:0,gv:6,jv:2,rooms:[[0,0,6,7]],freeArch:0,bd:null,shopName:'',facade:0,fence:0,day:1,dayT:0,today:null,rating:null,dayOver:false,cat:null,genres:[0],sold:{},stats:{books:0,coffee:0,pastry:0,seated:0,orders:0,looks:0,walls:0,floors:0,doors:0,pets:0,bestDay:0}};
 function starterStock(){return {romance:12,coffee:20};}
 state.stock=starterStock();
 var items=[],customers=[];
@@ -3244,7 +3244,7 @@ function decide(c){
   if(bargainWant(c)){nextIntent(c);return;}
   if(miniPlan(c)){if(c.plan.indexOf('book')>=0){c.wantGenre=pickGenre();showWant(c);}nextIntent(c);return;}
   var r=rnd();
-  c.plan=!byRole('snack').length?['book']:r<0.4?['book']:r<0.68?['snack']:rnd()<0.5?['book','snack']:['snack','book'];      // nobody comes for coffee before there is any
+  c.plan=!byRole('snack').length||!hasJob('food')?['book']:r<0.4?['book']:r<0.68?['snack']:rnd()<0.5?['book','snack']:['snack','book'];      // nobody comes for coffee before there is any, or while nobody has the Food job
   if(c.kidC&&state.genres.indexOf(4)>=0&&rnd()<0.75){if(c.plan.indexOf('book')<0)c.plan.unshift('book');c.wantGenre=4;showWant(c);}
   else if(c.plan.indexOf('book')>=0){c.wantGenre=pickGenre();showWant(c);}
   if(c.plan.indexOf('snack')<0&&menuTempt(c))c.plan.push('snack');
@@ -3506,6 +3506,7 @@ function collect(o){      // the order is up: walk to the pickup spot and take i
   else{c.state='toPickup';c.redo=function(){collect(o);};}
 }
 function trySnack(c){
+  if(!hasJob('food'))return false;      // the café is closed while nobody has Food: no order is taken that nobody would make
   var bars=shuffle(byRole('snack').filter(function(s){return s.stock>0;})).sort(function(a,b){return a.queue.length-b.queue.length;});
   if(c.wantGood){var mine=bars.filter(function(s){return s.def.good===c.wantGood;});if(mine.length)bars=mine;}
   if(miniOn('sun'))bars.sort(function(a,b){return (b.def.good==='cold')-(a.def.good==='cold');});      // hot days: the fridge first
@@ -3831,7 +3832,7 @@ function stockWork(w){
 }
 function dutyTask(w){
   var j=w.jobs,i,t;
-  for(i=0;i<j.length;i++){t=j[i]==='till'?(stationWork(w,'till',false)||(!hasJob('food')&&orderWork(w))):j[i]==='food'?foodWork(w):stockWork(w);if(t)return t;}
+  for(i=0;i<j.length;i++){t=j[i]==='till'?stationWork(w,'till',false):j[i]==='food'?foodWork(w):stockWork(w);if(t)return t;}
   for(i=0;i<j.length;i++)if(j[i]!=='stock'){t=stationWork(w,j[i],true);if(t)return t;}
   return null;
 }
@@ -3935,9 +3936,9 @@ function restoreJobs(){
     else if(Array.isArray(d)){var st=surfG[d[1]]?surfG[d[1]][d[0]]:null;w.jobs=st&&isStation(st)?[jobOf(st)]:[];}
   });
   if(workers[0]&&state.goal>=TUT_N&&!workers[0].jobs.length)workers[0].jobs=['till','stock'];      // past the first steps the owner always has something to do
-  if(oldJobsSave){      // a shop saved when Cash register still covered the Café Order Point: if nobody has Food, whoever has Cash register gets Food right after it, so the café keeps selling
+  if(oldJobsSave){      // a shop saved when the Cash register person still covered café work (the order point, or making coffee when nobody had Food): if nobody has Food, whoever has Cash register gets Food right after it, so the café keeps selling
     oldJobsSave=false;
-    if(items.some(function(i){return i.def.role==='counter'&&i.def.cafeOnly;})&&!hasJob('food')&&hasJob('till')){
+    if(stations().some(function(i){return jobOf(i)==='food';})&&!hasJob('food')&&hasJob('till')){
       workers.forEach(function(w){var n=w.jobs.indexOf('till');if(n>=0)w.jobs.splice(n+1,0,'food');});
       state.jobs=workers.map(function(w){return w.jobs.slice();});save();      // once only: the save written now carries jv, and so does every later one
     }
@@ -4621,6 +4622,7 @@ function alertText(inTut){
   if(lastReq&&clock-lastReq.t<90&&!items.some(function(i){return i.def.role==='shelf'&&i.genre===lastReq.g;}))return 'A customer asked for '+GENRES[lastReq.g].name+'. Order it in Stock, then give it a shelf.';
   var eh=evHint();if(eh)return eh;
   if(items.some(function(i){return i.bubble&&i.bubble.visible;}))return 'Something has run out. Tap Stock to order more.';
+  if(!hasJob('food')&&stations().some(function(i){return jobOf(i)==='food';}))return 'Nobody is on Food, so the caf\u00e9 is closed. Tap a member of staff and tick Food.';
   var wait=stations().filter(function(i){return i.queue.length&&!hasJob(jobOf(i));})[0];
   if(wait)return 'Someone is waiting at the '+wait.def.name.toLowerCase()+'. Tap a member of staff and tick '+(jobOf(wait)==='till'?'Cash register':'Food')+'.';
   if(!hasJob('stock')&&items.some(function(i){return i.def.cap&&!isStation(i)&&isLow(i)&&backCount(i)>0;}))return 'Shelves are low. Tap a member of staff and tick Restocking.';
@@ -5493,7 +5495,7 @@ function load(){
     state.hired=clamp(d.s.hired|0,0,HIRE.length);if(Array.isArray(d.s.staffLooks))state.staffLooks=d.s.staffLooks.slice(0,state.hired+1);
     if(Array.isArray(d.s.duties))state.duties=d.s.duties;
     state.jobs=Array.isArray(d.s.jobs)?d.s.jobs:null;
-    oldJobsSave=!(d.s.jv>=1);      // jv is in every save written since the Café Order Point moved to the Food job
+    oldJobsSave=!(d.s.jv>=2);      // jv 2 is in every save written since café work became the Food job's alone
     function cl(a,n){return Array.isArray(a)?a.map(function(r){return Array.isArray(r)?r.map(function(v){return clamp(v|0,0,n-1);}):null;}):null;}
     state.floorMap=cl(d.s.floorMap,FLOORS.length);
     state.wallMap=Array.isArray(d.s.wallMap)?d.s.wallMap.map(function(r){return Array.isArray(r)?r.map(function(v){return Array.isArray(v)?v.map(function(x){return clamp(x|0,0,WALL_COLS.length-1);}):clamp(v|0,0,WALL_COLS.length-1);}):null;}):null;
