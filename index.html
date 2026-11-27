@@ -319,6 +319,8 @@ body:not(.building) #bottom{padding-bottom:16px}
 #title{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:linear-gradient(180deg,rgba(38,31,61,.86),rgba(38,31,61,.5) 50%,rgba(38,31,61,.9));z-index:20}
 #title.on{display:flex}
 body.menu #hud,body.menu #bottom,body.menu #buildBtn,body.menu #stockBtn,body.menu #banner{visibility:hidden}
+#title .ver{margin-top:14px;color:#fff5e4;opacity:.6;font-size:12px}
+.ver{font-size:12px;font-weight:700;margin:10px 0 0;opacity:.55;text-align:center}
 #title .tw{display:flex;flex-direction:column;align-items:center;gap:8px;padding:24px;text-align:center}
 #title svg{width:84px;height:84px}
 #title h1{font-family:var(--display);font-weight:700;font-size:54px;line-height:.95;color:var(--paper);margin:4px 0 0;text-shadow:0 4px 0 rgba(0,0,0,.3)}
@@ -459,6 +461,7 @@ body.menu #hud,body.menu #bottom,body.menu #buildBtn,body.menu #stockBtn,body.me
       <div class="row">
         <button class="act go" id="closeMenu">Back to the shop</button>
       </div>
+      <p class="ver" id="verMenu"></p>
     </div>
   </div>
   <div id="mgmt">
@@ -475,6 +478,7 @@ body.menu #hud,body.menu #bottom,body.menu #buildBtn,body.menu #stockBtn,body.me
     <h1>Bookstore<br><span>Café</span></h1><p>Build it. Stock it. Make it cozy.</p>
     <button id="titleGo" class="big">Start</button>
     <button id="titleNew" class="lnk">New game</button>
+    <p class="ver" id="verTitle"></p>
   </div></div>
   <div id="creator">
     <b id="crTitle"></b><span id="crSub"></span>
@@ -510,6 +514,7 @@ var ROOM_PLAN=[{cost:300,level:3},{cost:700,level:4},{cost:1200,level:5}];
 var PATIO_PLAN=[{cost:250,level:3},{cost:450,level:5}];      // patios: open to the sky, with a low fence
 var LEVELS=[0,80,220,480,850,1400];
 var START_COINS=250;
+var GAME_VERSION='2026-11-27 b';      // shown on the title screen and in the ? sheet: change it by hand at every live push, so a phone shows which game it has
 var SAVE_KEY='bookstore-cafe-proto-v2';
 // each room has four sides: 0 north, 1 east, 2 south, 3 west
 var DIRS=[[0,-1],[1,0],[0,1],[-1,0]];  // N,E,S,W as tile steps
@@ -5286,6 +5291,7 @@ $('crBack').addEventListener('click',function(){if(CR.page>0){CR.page--;renderCr
 $('crNext').addEventListener('click',function(){if(CR.page<CR_PAGES.length-1){CR.page++;renderCreator();}else closeCreator();});
 // --- the front door of the game ---
 var titleNewArmed=false;
+['verTitle','verMenu'].forEach(function(id){var e=document.getElementById(id);if(e)e.textContent='Version '+GAME_VERSION;});
 function setTitle(on){$('title').classList.toggle('on',on);document.body.classList.toggle('menu',on);if(!on){renderGoal();resize();}}
 function showTitle(){
   var has=state.started||items.length>0;
