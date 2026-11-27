@@ -3762,8 +3762,8 @@ function carry(w,on){      // a cardboard box held out in front
 // Each person has a list of jobs in order of importance: the job tapped last on the jobs screen comes first. They do the first job
 // that has something to do right now, and when it has nothing, the next. When none has anything, they wait at the station of their first job.
 // Whoever puts a job higher gets its station and its orders ahead of someone who puts it lower; on a tie for first, whoever the player chose last.
-var JOBS=[{k:'till',name:'Cash register',sub:'Takes payment from customers.'},{k:'stock',name:'Restocking',sub:'Carries books from the back room to the shelves.'},{k:'food',name:'Food',sub:'Makes coffee and serves pastries.'}];
-function jobOf(it){return it.def.role==='counter'?'till':it.def.role==='snack'?'food':null;}
+var JOBS=[{k:'till',name:'Cash register',sub:'Takes payment at the cash register.'},{k:'stock',name:'Restocking',sub:'Carries books from the back room to the shelves.'},{k:'food',name:'Food',sub:'Runs the caf\u00e9 order point, makes coffee, serves pastries.'}];
+function jobOf(it){return it.def.role==='snack'||(it.def.role==='counter'&&it.def.cafeOnly)?'food':it.def.role==='counter'?'till':null;}      // the Café Order Point is part of the Food job
 function hasJob(k){return workers.some(function(w){return w.jobs.indexOf(k)>=0;});}
 function freeFor(it,w){return !(it.worker&&it.worker!==w)&&!(it.stocker&&it.stocker!==w)&&!blocked(it);}
 var pickSeq=0;      // counts the player's choices on the jobs screen: the latest choice wins a tie for the same first job
@@ -3787,7 +3787,7 @@ function stepAside(w){      // clear of every station's staff spot and every lin
 function stationWork(w,k,idle){
   var cur=w.task&&w.task.item,has=!!cur&&cur.worker===w&&jobOf(cur)===k;      // already at a station for this job: no need for anyone else's
   var list=items.filter(function(i){return isStation(i)&&jobOf(i)===k&&(has?freeFor(i,w):canTake(i,w,k));});
-  list.sort(function(a,b){return (b===cur)-(a===cur)||b.queue.length-a.queue.length||freeFor(b,w)-freeFor(a,w);});
+  list.sort(function(a,b){return (b===cur)-(a===cur)||b.queue.length-a.queue.length||freeFor(b,w)-freeFor(a,w)||(b.def.role==='counter')-(a.def.role==='counter');});      // with nothing to choose between them, wait where customers come to pay
   for(var i=0;i<list.length;i++){var st=list[i];
     if(st.def.cap&&freeFor(st,w)&&backCount(st)>0&&(st.stock<=0||(isLow(st)&&!st.queue.length)))return {type:'stock',item:st};      // top it up first
     if(st.queue.length&&!(st.def.cap&&st.stock<=0))return {type:'serve',item:st};}
@@ -5334,7 +5334,7 @@ function renderMgmt0(){
     var hd=row('<span class="who" style="background:'+(jw.owner?'#f4b942':'#3d8f8a')+'">'+esc((staffName(jw)||'?').charAt(0).toUpperCase())+'</span><div class="info"><b>'+esc(staffName(jw))+'</b><span>'+esc(jw.jobs.length?jobsLabel(jw).charAt(0).toUpperCase()+jobsLabel(jw).slice(1)+'.':'No jobs ticked yet.')+'</span></div>');
     var lb=document.createElement('button');lb.className='buy plain';lb.textContent='Change look';lb.addEventListener('click',function(){openLook(jobsW);});hd.appendChild(lb);
     JOBS.forEach(function(J){
-      var n=jw.jobs.indexOf(J.k),none=J.k==='till'?!hasRole('counter'):J.k==='food'?!items.some(function(i){return i.def.role==='snack';}):!hasRole('shelf');
+      var n=jw.jobs.indexOf(J.k),none=J.k==='stock'?!hasRole('shelf'):!stations().some(function(i){return jobOf(i)===J.k;});
       var r=row('<span class="jbox">'+(n>=0?n+1:'')+'</span><div class="info"><b>'+J.name+'</b><span>'+J.sub+(none?' <i>'+(J.k==='till'?'No cash register yet.':J.k==='food'?'No coffee machine or pastry case yet.':'No shelves yet.')+'</i>':'')+'</span></div>','jrow'+(n>=0?' on':''));
       r.dataset.k=J.k;r.setAttribute('role','checkbox');r.setAttribute('aria-checked',n>=0?'true':'false');r.tabIndex=0;
       r.addEventListener('click',function(){toggleJob(jw,J.k);});

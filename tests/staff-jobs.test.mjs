@@ -263,9 +263,46 @@ console.log('Checking ' + path.relative(process.cwd(), HTML) + '\n');
   errorsSeen.push(...g.errors); await g.close();
 }
 
-/* ---------- 4. the jobs lesson in the first steps ---------- */
+/* ---------- 4. the Café Order Point belongs to the Food job ---------- */
 {
-  console.log('\n4. The jobs lesson in the first steps');
+  console.log('\n4. The Caf\u00e9 Order Point is part of the Food job');
+  // a cash register and an order point: one person on Cash register only, one on Food only, one restocking
+  let g = await shop();
+  await g.ev(() => window.T.build({ orderpoint: true }));
+  await hireTwo(g);
+  await g.ev(() => window.T.setJobs([['till'], ['food'], ['stock']]));
+  let r = await g.ev(() => window.T.run(180));
+  const op = r.hold.orderpoint || [0, 0, 0], reg = r.hold.register || [0, 0, 0];
+  check('the person with Food staffs the order point', op[1] > 30, 'seconds holding the order point [Cash register only, Food only, Restocking only]: ' + J(op) + ' of ' + r.secs);
+  check('the person with only Cash register never does', op[0] === 0 && op[2] === 0, 'seconds holding the order point: ' + J(op));
+  check('the person with only Cash register stays on the cash register', reg[0] > 150 && reg[1] === 0, 'seconds holding the cash register: ' + J(reg));
+  check('books and coffee both sell', r.sold.books > 0 && r.sold.coffee > 0, 'sold ' + J(r.sold) + ' | activity: ' + J(r.act));
+  check('nobody standing still shares a tile', r.clash === 0, 'clashes: ' + r.clash);
+  errorsSeen.push(...g.errors); await g.close();
+
+  // a shop whose only till is the order point
+  g = await shop();
+  await g.ev(() => { window.T.build({ register: false, orderpoint: true }); window.T.doors(false); window.T.setJobs([['food']]); });
+  r = await g.ev(() => window.T.run(8));
+  check('with nobody in the shop, the person on Food waits at the order point', (r.hold.orderpoint || [0])[0] >= 4 && !(r.hold.espresso || [0])[0], 'seconds held: order point ' + J(r.hold.orderpoint) + ', coffee machine ' + J(r.hold.espresso));
+  r = await g.ev(() => { window.T.doors(true); return window.T.run(180); });
+  check('order point only, one person on Food: payment is taken and coffee is made', r.sold.coffee > 0 && (r.hold.orderpoint || [0])[0] > 0, 'sold ' + J(r.sold) + ' | activity: ' + J(r.act));
+  await g.ev(() => window.__shop.openJobs(0));
+  const notes = await g.ev(() => window.T.rowNotes());
+  await tap(g, '#mgmtClose');
+  check('the jobs screen says there is no cash register, and does not warn about Food', /No cash register/.test(notes.till) && notes.food === '', 'notes beside the jobs: ' + J(notes));
+  const soldBefore = r.sold.coffee;
+  await g.ev(() => window.T.setJobs([['till']]));
+  r = await g.ev(() => window.T.run(120));
+  const alert = await g.ev(() => window.__shop.peek('alertText(false)'));
+  check('order point only, one person on Cash register only: nobody staffs it', r.sold.coffee === soldBefore && !(r.hold.orderpoint || [0])[0], 'coffee sold before ' + soldBefore + ', after ' + r.sold.coffee + ' | activity: ' + J(r.act));
+  check('and the game says to use Food', /order point/.test(alert) && /Food/.test(alert), 'banner: ' + alert);
+  errorsSeen.push(...g.errors); await g.close();
+}
+
+/* ---------- 5. the jobs lesson in the first steps ---------- */
+{
+  console.log('\n5. The jobs lesson in the first steps');
   // follow the pointer the way a new player does; with swap, tap the two jobs the other way round
   const lesson = async swap => {
     const g = await shop({ tutorial: true });
