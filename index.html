@@ -514,7 +514,7 @@ var ROOM_PLAN=[{cost:300,level:3},{cost:700,level:4},{cost:1200,level:5}];
 var PATIO_PLAN=[{cost:250,level:3},{cost:450,level:5}];      // patios: open to the sky, with a low fence
 var LEVELS=[0,80,220,480,850,1400];
 var START_COINS=250;
-var GAME_VERSION='2026-11-27 d';      // shown on the title screen and in the ? sheet: change it by hand at every live push, so a phone shows which game it has
+var GAME_VERSION='2026-11-27 e';      // shown on the title screen and in the ? sheet: change it by hand at every live push, so a phone shows which game it has
 var SAVE_KEY='bookstore-cafe-proto-v2';
 // each room has four sides: 0 north, 1 east, 2 south, 3 west
 var DIRS=[[0,-1],[1,0],[0,1],[-1,0]];  // N,E,S,W as tile steps
@@ -4621,6 +4621,21 @@ function checkGoals(){
   sfx('goal');state.coins+=coins;toast(n===1?'Done: '+last.name+'. +'+coins+' coins':n+' goals done. +'+coins+' coins');
   bump('coinPill');mgmtDirty=true;updateHUD();save();
 }
+// A station staff can never work: of the tiles it is worked from (staffSpots, the same ones staff walk to), none can be walked to from the door
+// once the tile its own first customer stands on is left out. (A machine has no line of its own when customers pay at a register or order point.)
+// Worked out once per layout: the tiles reachable from the door, counting furniture, walls and archways, no dice thrown.
+var doorReach={v:-1,k:{}};
+function reachFromDoor(){
+  if(doorReach.v===layoutVersion)return doorReach.k;
+  var seen={},q=[[DOOR.x,DOOR.z]];seen[DOOR.x+','+DOOR.z]=1;
+  while(q.length){var c=q.shift();for(var i=0;i<4;i++){var nx=c[0]+DIRS[i][0],nz=c[1]+DIRS[i][1],k=nx+','+nz;
+    if(seen[k]||!walkable(nx,nz)||edgeBetween(c[0],c[1],nx,nz))continue;seen[k]=1;q.push([nx,nz]);}}
+  doorReach={v:layoutVersion,k:seen};return seen;
+}
+function noStaffSide(it,viaTill){
+  var sp=staffSpots(it),line=it.def.role==='snack'&&viaTill?null:queueSlots(it)[0],r=reachFromDoor();
+  return !sp[0].concat(sp[1]).some(function(t){return !(line&&line.x===t.x&&line.z===t.z)&&r[key(t)];});
+}
 // things that need attention now, ahead of the goal. During the first steps only real blockers interrupt.
 function alertText(inTut){
   var idle=workers.filter(function(w){return !w.jobs.length;}),who=idle.length?(idle[0].owner?'your character':'your helper'):'a member of staff';
@@ -4629,6 +4644,8 @@ function alertText(inTut){
   if(cut)return 'Customers cannot reach the '+cut.def.name.toLowerCase()+'. Clear the floor in front of it.';
   var cutS=viaTill&&byRole('snack').filter(function(i){var sp=staffSpots(i);return !sp[0].length&&!sp[1].length;})[0];
   if(cutS)return 'Staff cannot reach the '+cutS.def.name.toLowerCase()+'. Leave a free tile beside it.';
+  var noSide=stations().filter(function(i){return noStaffSide(i,viaTill);})[0];
+  if(noSide)return 'Staff have no free side at the '+noSide.def.name.toLowerCase()+'. Leave a free side for staff.';
   if(cutOffRoom()>=0)return buildMode?'The new room has no way in yet. Drag an Archway or a door from the Walls tab onto the low wall between the rooms.':'A room has no way in. Tap Build and add an Archway to the low wall.';
   if(inTut||buildMode)return '';
   if(lastReq&&clock-lastReq.t<90&&!items.some(function(i){return i.def.role==='shelf'&&i.genre===lastReq.g;}))return 'A customer asked for '+GENRES[lastReq.g].name+'. Order it in Stock, then give it a shelf.';

@@ -592,6 +592,65 @@ if (want('7')) {
   errorsSeen.push(...g.errors); await g.close();
 }
 
+/* ---------- 8. a station with no free side for staff is pointed out ---------- */
+if (want('8')) {
+  console.log('\n8. Leave a free side for staff');
+  // A register on a counter at 3,3 facing south: staff stand behind it (3,2), customers line up in front (3,4). Plain counters close the other sides.
+  const NOSIDE = /no free side at the cash register.*Leave a free side for staff/;
+  const lay = (g, closed, extra) => g.ev(([closed, extra]) => {
+    const S = window.__shop, P = S.peek, T = window.T;
+    S.setLevelXP(999999); P('level=levelFor(xpTotal())'); S.state.coins = 5000; S.setBuild(true);
+    T.put('counter', 3, 3); T.put('register', 3, 3, 0);
+    closed.forEach(q => T.put('counter', q[0], q[1]));
+    const ok = !extra || S.canPlace(S.DEF[extra[0]], { x: extra[1], z: extra[2], rot: extra[3] });
+    if (extra && ok) T.put(extra[0], extra[1], extra[2], extra[3], 6, 0);
+    const sp = P('staffSpots')(T.find('register'));
+    return { ok, spots: sp[0].concat(sp[1]).map(t => t.x + ',' + t.z), line: P('queueSlots')(T.find('register')).slice(0, 1).map(t => t.x + ',' + t.z), alert: P('alertText(false)') };
+  }, [closed, extra || null]);
+  const alertNow = (g, build) => g.ev(b => { window.__shop.setBuild(b); return window.__shop.peek('alertText(false)'); }, build);
+
+  // behind and both sides closed: the only side staff could use is the front, where the line stands
+  let g = await shop();
+  let r = await lay(g, [[3, 2], [2, 3], [4, 3]]);
+  check('setup: the register can only be worked from its front tile, which is where its line starts', J(r.spots) === J(['3,4']) && J(r.line) === J(['3,4']), 'work tiles ' + J(r.spots) + ' | first line tile ' + J(r.line));
+  check('one open side, in build mode: the banner says to leave a free side for staff', NOSIDE.test(r.alert), 'banner: "' + r.alert + '"');
+  const play = await alertNow(g, false);
+  check('and it still says so out of build mode', NOSIDE.test(play), 'banner: "' + play + '"');
+  errorsSeen.push(...g.errors); await g.close();
+
+  // one side left open: staff work from the side, customers line up in front. No warning.
+  g = await shop();
+  r = await lay(g, [[3, 2], [2, 3]]);
+  check('two open sides (front and one side): no warning', r.spots.indexOf('4,3') >= 0 && !NOSIDE.test(r.alert) && !/free side/.test(r.alert), 'work tiles ' + J(r.spots) + ' | banner: "' + r.alert + '"');
+  errorsSeen.push(...g.errors); await g.close();
+
+  // a bookshelf closes the last side; moving it away in build mode frees the side and the warning goes at once
+  g = await shop();
+  r = await lay(g, [[3, 2], [2, 3]], ['shelf', 4, 3, 1]);
+  check('setup: a bookshelf can be put on the register\'s last open side', r.ok, 'canPlace: ' + r.ok);
+  check('with the shelf there: the banner says to leave a free side for staff', NOSIDE.test(r.alert), 'banner: "' + r.alert + '"');
+  const moved = await g.ev(() => {
+    const S = window.__shop, P = S.peek, T = window.T, sh = T.find('shelf');
+    P('removeItem')(sh); T.put('shelf', 0, 5, 1, 6, 0);      // as a player dragging it to the wall
+    return P('alertText(false)');
+  });
+  check('move the shelf away: the warning clears straight away', !NOSIDE.test(moved) && !/free side/.test(moved), 'banner: "' + moved + '"');
+  errorsSeen.push(...g.errors); await g.close();
+
+  // the pastry-case warning is unchanged: a croissant case closed in on every side, in a shop with a register
+  g = await shop();
+  const pastry = await g.ev(() => {
+    const S = window.__shop, P = S.peek, T = window.T;
+    S.setLevelXP(999999); P('level=levelFor(xpTotal())'); S.state.coins = 5000; S.setBuild(true);
+    T.put('counter', 1, 4); T.put('register', 1, 4, 0);
+    T.put('counter', 5, 3); T.put('croissants', 5, 3, 0, 6);
+    [[5, 2], [4, 3], [6, 3], [5, 4]].forEach(q => T.put('counter', q[0], q[1]));
+    return P('alertText(false)');
+  });
+  check('pastry case closed in on every side: the same warning as before', pastry === 'Staff cannot reach the croissant case. Leave a free tile beside it.', 'banner: "' + pastry + '"');
+  errorsSeen.push(...g.errors); await g.close();
+}
+
 /* ---------- 6. the game's sound leaves other sound on the phone alone ---------- */
 if (want('6')) {
   console.log('\n6. Sound');
