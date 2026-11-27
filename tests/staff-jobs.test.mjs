@@ -4,7 +4,7 @@
 // It opens the real page in headless Chrome, builds a small shop, changes jobs by tapping the rows of the jobs screen,
 // steps the game's own clock, and records what each member of staff does. Nothing here is loaded by the game or its service worker.
 // Other settings: CHROME (path to the browser), PLAYWRIGHT_DIR (a node_modules folder that holds playwright).
-// fixtures/save-4dedba2.json is a save written by the game as it was at commit 4dedba2, before the jobs change.
+// The saves in fixtures/ were written by the game as it was at commit 4dedba2, before the jobs change.
 import { createRequire } from 'module';
 import fs from 'fs';
 import path from 'path';
@@ -170,10 +170,13 @@ console.log('Checking ' + path.relative(process.cwd(), HTML) + '\n');
   jobs = await g.ev(() => window.T.jobs());
   check('tap the number 1 job: it is switched off and the rest keep their order', jobs[0] === 'till>stock', 'owner: ' + jobs[0] + ' | rows: ' + rows);
 
-  // and in the shop: helper 1 (Food chosen last) is the one at the coffee machine, ahead of helper 2 who also has Food first
+  // and in the shop. Helper 2 also had Food first; the player taps Restocking for them, so helper 1 is now the only one with Food first.
+  rows = await tapJob(g, 2, 'stock');
+  jobs = await g.ev(() => window.T.jobs());
+  check('tap Restocking for helper 2: Restocking first, Food second', jobs[2] === 'stock>food>till', 'helper 2: ' + jobs[2] + ' | rows: ' + rows);
   const r = await g.ev(() => window.T.run(150));
   const hold = r.hold.espresso || [0, 0, 0];
-  check('after choosing Food for helper 1, helper 1 minds the coffee machine', hold[1] > 75 && hold[1] > hold[2] * 2, 'seconds holding the coffee machine [owner, helper 1, helper 2]: ' + J(hold) + ' of ' + r.secs);
+  check('helper 1 (Food first) is the one at the coffee machine, not helper 2 (Food second)', hold[1] > 75 && hold[1] > hold[2] * 2, 'seconds holding the coffee machine [owner, helper 1, helper 2]: ' + J(hold) + ' of ' + r.secs);
   check('helper 1 makes more of the orders than helper 2', r.made[1] > 0 && r.made[1] >= r.made[2], 'orders made [owner, helper 1, helper 2]: ' + J(r.made) + ' | activity: ' + J(r.act));
   check('nobody standing still shares a tile', r.clash === 0, 'clashes: ' + r.clash);
   errorsSeen.push(...g.errors); await g.close();
@@ -196,54 +199,126 @@ console.log('Checking ' + path.relative(process.cwd(), HTML) + '\n');
   check('helper 2 (Food first) takes the coffee machine from helper 1 (Food third)', after === 2, 'coffee machine held by person ' + after + ' | seconds held [owner, helper 1, helper 2]: ' + J(q.hold.espresso));
   check('helper 1 steps out of the staff spot instead of standing there', q.staffSpotIdle[1] <= 1, 'seconds idle in a staff spot: ' + J(q.staffSpotIdle));
 
-  // the owner minds the only register. The player taps Cash register for helper 1: both now have it first, the last chosen gets it.
+  // the owner minds the only register. The player taps Cash register for helper 1: both now have it first. The owner was there first and keeps it.
   const hadTill = await g.ev(() => window.T.holder('register'));
   const rows = await tapJob(g, 1, 'till');
+  const tie = await g.ev(() => window.T.jobs());
   const t15 = await g.ev(() => window.T.run(15));
-  check('tap Cash register for helper 1 while the owner minds the only register: helper 1 takes it over', hadTill === 0 && (t15.hold.register || [])[1] >= 12, 'register held by person ' + hadTill + ' before; next 15 seconds held [owner, helper 1, helper 2]: ' + J(t15.hold.register) + ' | rows: ' + rows);
-  check('the owner steps out of the staff spot', t15.staffSpotIdle[0] <= 1, 'seconds idle in a staff spot: ' + J(t15.staffSpotIdle));
+  check('setup: the owner and helper 1 both have Cash register first, and there is one register', tie[0].split('>')[0] === 'till' && tie[1].split('>')[0] === 'till' && hadTill === 0, 'jobs: ' + J(tie) + ' | rows: ' + rows);
+  check('a tie for one register: the owner, who was there first, keeps it', (t15.hold.register || [])[0] >= 14 && !t15.hold.register[1], 'next 15 seconds, register held [owner, helper 1, helper 2]: ' + J(t15.hold.register));
+  check('helper 1 waits out of the staff spot', t15.staffSpotIdle[1] <= 1, 'seconds idle in a staff spot: ' + J(t15.staffSpotIdle));
 
-  // that choice survives closing and reopening the game, even when the owner gets to the register first
+  // it is whoever gets there first, either way round. Reload the shop twice: once with the owner slow off the mark, once with helper 1 slow.
   const saved = await g.ev(() => { window.__shop.peek('saveNow')(); return window.T.jobs(); });
   await g.reload();
   const back = await g.ev(() => window.T.jobs());
   check('jobs come back in the same order after a reload', J(back) === J(saved), 'saved ' + J(saved) + ' | loaded ' + J(back));
-  await g.ev(() => { window.T.doors(false); window.__shop.workers[1].think = 4; return window.T.run(3); });      // helper 1 is slow off the mark
-  const first = await g.ev(() => window.T.holder('register'));
-  const r3 = await g.ev(() => window.T.run(10));
-  const then = await g.ev(() => window.T.holder('register'));
-  check('after the reload the last-chosen person still gets the register from the owner', first === 0 && then === 1, 'register held by person ' + first + ' at first, then by person ' + then + ' | seconds held: ' + J(r3.hold.register));
+  const race = async slow => {
+    await g.reload();
+    await g.ev(slow => { window.T.doors(false); window.__shop.workers[slow].think = 4; }, slow);
+    await g.ev(() => window.T.run(3));
+    const first = await g.ev(() => window.T.holder('register'));
+    const rr = await g.ev(() => window.T.run(12));
+    return { first, then: await g.ev(() => window.T.holder('register')), held: rr.hold.register };
+  };
+  let rc = await race(0);
+  check('helper 1 reaches the register first: helper 1 keeps it when the owner turns up', rc.first === 1 && rc.then === 1 && !rc.held[0], 'held by person ' + rc.first + ' at first, person ' + rc.then + ' twelve seconds later | seconds held: ' + J(rc.held));
+  rc = await race(1);
+  check('the owner reaches the register first: the owner keeps it when helper 1 turns up', rc.first === 0 && rc.then === 0 && !rc.held[1], 'held by person ' + rc.first + ' at first, person ' + rc.then + ' twelve seconds later | seconds held: ' + J(rc.held));
 
   // doors open: a busy shop for two and a half minutes
   const r = await g.ev(() => { window.T.doors(true); return window.T.run(150); });
   check('with customers: helper 2 (Food first) makes more of the orders than helper 1 (Food third)', r.made[2] > r.made[1], 'orders made [owner, helper 1, helper 2]: ' + J(r.made) + ' | coffee machine held: ' + J(r.hold.espresso));
-  check('with customers: helper 1 holds the register more than the owner', (r.hold.register || [])[1] > r.hold.register[0], 'seconds holding the register [owner, helper 1, helper 2]: ' + J(r.hold.register) + ' of ' + r.secs + ' | activity: ' + J(r.act));
   check('nobody with nothing to do stands in a staff spot', r.staffSpotIdle.every(x => x <= 1), 'seconds idle in a staff spot: ' + J(r.staffSpotIdle));
   check('nobody standing still shares a tile', r.clash === 0, 'clashes: ' + r.clash);
   errorsSeen.push(...g.errors); await g.close();
 }
 
-/* ---------- 2b. two registers, two people on Cash register: nobody takes a register someone else is working ---------- */
+/* ---------- 2b. people on the same job spread out over its stations ---------- */
 {
-  const g = await shop();
-  await g.ev(() => {
-    const T = window.T;
-    T.build({ espresso: false }); T.put('counter', 5, 4); T.put('register', 5, 4, 0);      // books only, so nobody leaves a register to make coffee
-  });
+  console.log('\n2b. Two people on one job');
+  // counts the seconds each person holds each station, how often a station changes hands, and how often someone minding one is pushed off it by a colleague
+  const watch = (g, ids, secs) => g.ev(([ids, secs]) => {
+    const S = window.__shop, sts = S.items.filter(i => ids.indexOf(i.def.id) >= 0), held = sts.map(() => S.workers.map(() => 0)), at = sts.map(q => q.worker);
+    let hands = 0, both = 0, pushed = 0;
+    for (let k = 0; k < secs / 0.05; k++) {
+      const was = sts.map(q => (q.worker && q.worker.task && q.worker.task.type === 'serve' && q.worker.task.item === q) ? q.worker : null);
+      S.simulate(0.05);
+      sts.forEach((q, i) => { if (was[i] && q.worker && q.worker !== was[i] && !was[i].task) pushed++; });
+      sts.forEach((q, i) => { if (q.worker) { held[i][S.workers.indexOf(q.worker)] += 0.05; if (at[i] && q.worker !== at[i]) hands++; at[i] = q.worker; } });
+      if (sts.every(q => q.worker) && new Set(sts.map(q => q.worker)).size === sts.length) both += 0.05;
+    }
+    return { names: sts.map(q => q.def.id), held: held.map(h => h.map(Math.round)), hands, pushed, both: Math.round(both), books: S.state.stats.books, coffee: S.state.stats.coffee };
+  }, [ids, secs]);
+
+  // two registers, two people on Cash register only (books only, so nobody leaves a register to make coffee)
+  let g = await shop();
+  await g.ev(() => { const T = window.T; T.build({ espresso: false }); T.put('counter', 5, 4); T.put('register', 5, 4, 0); T.doors(false); });
   await hireTwo(g);
-  await g.ev(() => { window.T.setJobs([['till'], ['till'], []]); window.__shop.workers[1].pick = 9; });      // helper 1 was chosen last
-  const r = await g.ev(() => {
-    const S = window.__shop, regs = S.items.filter(i => i.def.id === 'register'), held = regs.map(() => [0, 0, 0]);
-    for (let k = 0; k < 20; k++) S.simulate(0.05);      // a second to walk over
-    let swaps = 0; const at = regs.map(q => q.worker);
+  await g.ev(() => window.T.setJobs([['till'], ['till'], []]));
+  let q = await watch(g, ['register'], 8);
+  check('two registers, two people on Cash register, empty shop: one at each', q.both >= 6, 'seconds with a different person at each register: ' + q.both + ' of 8 | seconds held per register [owner, helper 1, helper 2]: ' + J(q.held));
+  await g.ev(() => window.T.doors(true));
+  q = await watch(g, ['register'], 150);
+  check('with customers: each keeps their own register', q.hands === 0 && q.books > 0, 'changes of hands: ' + q.hands + ' | seconds held per register: ' + J(q.held) + ' | books sold: ' + q.books);
+  errorsSeen.push(...g.errors); await g.close();
+
+  // two registers again: helper 1 has Cash register second (after Food, which has nothing to do here) and is working one; the owner has it first and turns up later
+  g = await shop();
+  await g.ev(() => { const T = window.T; T.build({ espresso: false }); T.put('counter', 5, 4); T.put('register', 5, 4, 0); });
+  await hireTwo(g);
+  await g.ev(() => window.T.setJobs([[], ['food', 'till'], []]));
+  const alone = await watch(g, ['register'], 20);      // helper 1 has a register to themselves for twenty seconds
+  await g.ev(() => { window.__shop.workers[0].jobs = ['till']; });
+  q = await watch(g, ['register'], 170);
+  check('someone who puts Cash register higher takes the free register, and never pushes a colleague off theirs', alone.held.some(h => h[1] >= 15) && q.pushed === 0 && q.hands === 0 && q.both >= 120 && q.books > 0,
+    'first 20 seconds, held per register: ' + J(alone.held) + ' | then: times someone was pushed off a register: ' + q.pushed + ' | changes of hands: ' + q.hands + ' | seconds with a different person at each register: ' + q.both + ' of 170 | seconds held per register [owner, helper 1, helper 2]: ' + J(q.held) + ' | books sold: ' + q.books);
+  errorsSeen.push(...g.errors); await g.close();
+
+  // an order point and a coffee machine, two people on Food only (and one on Cash register)
+  g = await shop();
+  await g.ev(() => { window.T.build({ orderpoint: true }); window.T.doors(false); });
+  await hireTwo(g);
+  await g.ev(() => window.T.setJobs([['till'], ['food'], ['food']]));
+  q = await watch(g, ['orderpoint', 'espresso'], 8);
+  check('an order point and a coffee machine, two people on Food, empty shop: one at each', q.both >= 6, 'seconds with a different person at each: ' + q.both + ' of 8 | seconds held ' + J(q.names) + ' [owner, helper 1, helper 2]: ' + J(q.held));
+  // doors open: the first coffee is paid for at the order point and made by whoever is standing at the machine (three shops, different dice)
+  const firstOrder = () => g.ev(() => {
+    const S = window.__shop, T = window.T, op = T.find('orderpoint'), esp = T.find('espresso'), who = x => S.workers.indexOf(x);
+    const before = { point: who(op.worker), machine: who(esp.worker) };
+    T.doors(true);
     for (let k = 0; k < 150 / 0.05; k++) {
       S.simulate(0.05);
-      regs.forEach((q, i) => { if (q.worker) { held[i][S.workers.indexOf(q.worker)] += 0.05; if (at[i] && q.worker !== at[i]) swaps++; at[i] = q.worker; } });
+      const m = S.workers.filter(w => w.task && w.task.type === 'make')[0];
+      if (m) return { before, maker: who(m), pointNow: who(op.worker), secs: Math.round(k * 0.05) };
     }
-    return { held: held.map(h => h.map(Math.round)), swaps, books: S.state.stats.books };
+    return { before, maker: -1 };
   });
-  check('two registers, two people on Cash register: each keeps their own', r.swaps === 0 && r.books > 0, 'changes of hands: ' + r.swaps + ' | seconds held per register [owner, helper 1, helper 2]: ' + J(r.held) + ' | books sold: ' + r.books);
+  const firsts = [await firstOrder()];
+  // and then a busy three minutes: nobody on Food stands about with no station while a food station is empty
+  const busy = await g.ev(() => {
+    const S = window.__shop, T = window.T, sts = [T.find('orderpoint'), T.find('espresso')], held = sts.map(() => [0, 0, 0]); let wasted = 0;
+    for (let k = 0; k < 180 / 0.05; k++) {
+      S.simulate(0.05);
+      sts.forEach((q, i) => { if (q.worker) held[i][S.workers.indexOf(q.worker)] += 0.05; });
+      if (sts.some(q => !q.worker) && S.workers.some(w => w.jobs[0] === 'food' && !w.task && !w.path.length)) wasted += 0.05;
+    }
+    return { held: held.map(h => h.map(Math.round)), wasted: Math.round(wasted), coffee: S.state.stats.coffee };
+  });
   errorsSeen.push(...g.errors); await g.close();
+  for (const seed of [777, 4242]) {
+    g = await shop({ seed });
+    await g.ev(() => { window.T.build({ orderpoint: true }); window.T.doors(false); });
+    await hireTwo(g);
+    await g.ev(() => { window.T.setJobs([['till'], ['food'], ['food']]); window.T.run(8); });
+    firsts.push(await firstOrder());
+    errorsSeen.push(...g.errors); await g.close();
+  }
+  check('the first coffee is made by the person at the machine, and the person at the order point stays there',
+    firsts.every(f => f.before.point >= 1 && f.before.machine >= 1 && f.before.point !== f.before.machine && f.maker === f.before.machine && f.pointNow === f.before.point),
+    'per shop: ' + J(firsts.map(f => ({ atOrderPoint: f.before.point, atMachine: f.before.machine, madeBy: f.maker }))));
+  check('with customers: nobody on Food stands idle while a food station is empty', busy.wasted <= 6 && busy.coffee > 0,
+    'seconds like that: ' + busy.wasted + ' of 180 | seconds held [order point, coffee machine] by [owner, helper 1, helper 2]: ' + J(busy.held) + ' | coffee sold: ' + busy.coffee);
 }
 
 /* ---------- 3. a save made before this change still loads ---------- */

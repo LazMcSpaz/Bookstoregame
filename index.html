@@ -3761,23 +3761,27 @@ function carry(w,on){      // a cardboard box held out in front
 // what should this person be doing right now, given the job the player gave them?
 // Each person has a list of jobs in order of importance: the job tapped last on the jobs screen comes first. They do the first job
 // that has something to do right now, and when it has nothing, the next. When none has anything, they wait at the station of their first job.
-// Whoever puts a job higher gets its station and its orders ahead of someone who puts it lower; on a tie for first, whoever the player chose last.
+// People on the same job spread out over its stations (two registers; an order point and a coffee machine). When there is one station
+// for two people, whoever puts the job higher has it; if they put it equally high, whoever got there first keeps it.
 var JOBS=[{k:'till',name:'Cash register',sub:'Takes payment at the cash register.'},{k:'stock',name:'Restocking',sub:'Carries books from the back room to the shelves.'},{k:'food',name:'Food',sub:'Runs the caf\u00e9 order point, makes coffee, serves pastries.'}];
 function jobOf(it){return it.def.role==='snack'||(it.def.role==='counter'&&it.def.cafeOnly)?'food':it.def.role==='counter'?'till':null;}      // the Café Order Point is part of the Food job
 function hasJob(k){return workers.some(function(w){return w.jobs.indexOf(k)>=0;});}
 function freeFor(it,w){return !(it.worker&&it.worker!==w)&&!(it.stocker&&it.stocker!==w)&&!blocked(it);}
-var pickSeq=0;      // counts the player's choices on the jobs screen: the latest choice wins a tie for the same first job
 function keener(w,x,k){      // does w put job k ahead of where x puts it?
   var a=w.jobs.indexOf(k),b=x.jobs.indexOf(k);
-  return a>=0&&(b<0||a<b||(a===0&&b===0&&(w.pick||0)>(x.pick||0)));
+  return a>=0&&(b<0||a<b);
 }
 function minding(x,it){return !!x.task&&x.task.type==='serve'&&x.task.item===it&&x.state!=='order';}      // at a station, but not in the middle of a sale
-function canTake(it,w,k){      // free, or minded by someone this job matters less to
+function canTake(it,w,k){      // minded by someone this job matters less to
   var x=it.worker;
-  return freeFor(it,w)||(!!x&&x!==w&&!it.stocker&&!blocked(it)&&minding(x,it)&&keener(w,x,k));
+  return !!x&&x!==w&&!it.stocker&&!blocked(it)&&minding(x,it)&&keener(w,x,k);
 }
 function spare(x){return !x.stuckT&&(!x.task||(x.task.type==='serve'&&!x.task.item.queue.length&&x.state!=='order'));}      // nothing in hand right now
-function leaveIt(w,k){return workers.some(function(x){return x!==w&&keener(x,w,k)&&spare(x);});}      // someone this job matters more to is free to do it
+function orderFor(w){      // the next café order for w to make, unless someone better placed is free: they put Food higher, or put it as high and are already at that machine
+  var t=orderWork(w);if(!t)return null;
+  var r=w.jobs.indexOf('food'),there=!!w.task&&w.task.item===t.item;
+  return workers.some(function(x){var q=x.jobs.indexOf('food');return x!==w&&q>=0&&spare(x)&&(q<r||(q===r&&!there&&!!x.task&&x.task.item===t.item));})?null:t;
+}
 function stepAside(w){      // clear of every station's staff spot and every line, so whoever works there has room
   var keep={},open=[];
   stations().forEach(function(s){staffSpots(s)[0].concat(queueSlots(s)).forEach(function(q){keep[key(q)]=1;});});
@@ -3785,9 +3789,9 @@ function stepAside(w){      // clear of every station's staff spot and every lin
   return workerGo(w,[open]);
 }
 function stationWork(w,k,idle){
-  var cur=w.task&&w.task.item,has=!!cur&&cur.worker===w&&jobOf(cur)===k;      // already at a station for this job: no need for anyone else's
-  var list=items.filter(function(i){return isStation(i)&&jobOf(i)===k&&(has?freeFor(i,w):canTake(i,w,k));});
-  list.sort(function(a,b){return (b===cur)-(a===cur)||b.queue.length-a.queue.length||freeFor(b,w)-freeFor(a,w)||(b.def.role==='counter')-(a.def.role==='counter');});      // with nothing to choose between them, wait where customers come to pay
+  var cur=w.task&&w.task.item,all=items.filter(function(i){return isStation(i)&&jobOf(i)===k;}),list=all.filter(function(i){return freeFor(i,w);});      // a station nobody else is at: people on one job spread out
+  if(!list.length)list=all.filter(function(i){return canTake(i,w,k);});      // every one is taken: have the station of someone this job matters less to
+  list.sort(function(a,b){return (b===cur)-(a===cur)||b.queue.length-a.queue.length||(b.def.role==='counter')-(a.def.role==='counter');});      // with nothing to choose between them, wait where customers come to pay
   for(var i=0;i<list.length;i++){var st=list[i];
     if(st.def.cap&&freeFor(st,w)&&backCount(st)>0&&(st.stock<=0||(isLow(st)&&!st.queue.length)))return {type:'stock',item:st};      // top it up first
     if(st.queue.length&&!(st.def.cap&&st.stock<=0))return {type:'serve',item:st};}
@@ -3805,7 +3809,7 @@ function stockWork(w){
 }
 function dutyTask(w){
   var j=w.jobs,i,t;
-  for(i=0;i<j.length;i++){t=j[i]==='till'?(stationWork(w,'till',false)||(!hasJob('food')&&orderWork(w))):j[i]==='food'?((!leaveIt(w,'food')&&orderWork(w))||stationWork(w,'food',false)):stockWork(w);if(t)return t;}
+  for(i=0;i<j.length;i++){t=j[i]==='till'?(stationWork(w,'till',false)||(!hasJob('food')&&orderWork(w))):j[i]==='food'?(orderFor(w)||stationWork(w,'food',false)):stockWork(w);if(t)return t;}
   for(i=0;i<j.length;i++)if(j[i]!=='stock'){t=stationWork(w,j[i],true);if(t)return t;}
   return null;
 }
@@ -3894,7 +3898,7 @@ function are(w){return w.owner&&!state.name?' are':' is';}
 function assign(w,it){      // kept for tests and old code paths: give someone a single job, the one this thing belongs to
   var kid=childOf(it);if(kid&&isStation(kid))it=kid;
   var k=isStation(it)?jobOf(it):it.def.cap?'stock':null;if(!k)return false;
-  w.jobs=[k];w.pick=++pickSeq;setTask(w,null);w.think=0;save();mgmtDirty=true;return true;
+  w.jobs=[k];setTask(w,null);w.think=0;save();mgmtDirty=true;return true;
 }
 function defaultJobs(){      // a new hire starts on whatever nobody covers yet, then everything else
   var base=['till','stock','food'],tops=workers.filter(function(w){return w.jobs.length;}).map(function(w){return w.jobs[0];}),first=base.filter(function(k){return tops.indexOf(k)<0;})[0]||'till';      // register, then restocking, then food: whichever is nobody's first job yet
@@ -3904,7 +3908,6 @@ function jobsLabel(w){return !w.jobs.length?'no jobs ticked':w.jobs.map(function
 function restoreJobs(){
   workers.forEach(function(w,i){
     var j=(state.jobs||[])[i],d=(state.duties||[])[i];
-    w.pick=Math.max(0,(state.jobPick||[])[i]|0);pickSeq=Math.max(pickSeq,w.pick);
     if(Array.isArray(j))w.jobs=j.filter(function(k,n){return ['till','stock','food'].indexOf(k)>=0&&j.indexOf(k)===n;});
     else if(d==='s')w.jobs=['stock'];
     else if(Array.isArray(d)){var st=surfG[d[1]]?surfG[d[1]][d[0]]:null;w.jobs=st&&isStation(st)?[jobOf(st)]:[];}
@@ -5236,7 +5239,7 @@ function jobsOpen(){return $('mgmt').classList.contains('on')&&mgmtTab==='jobs';
 function toggleJob(w,k){      // tap a job and it comes first; tap the first job and it is switched off
   var i=w.jobs.indexOf(k);
   if(i>=0)w.jobs.splice(i,1);
-  if(i!==0){w.jobs.unshift(k);w.pick=++pickSeq;}
+  if(i!==0)w.jobs.unshift(k);
   setTask(w,null);w.think=0;save();renderMgmt();
   var box=document.querySelector('#mgmtBody .jrow[data-k="'+k+'"] .jbox');if(box)box.classList.add('bump');
   try{if(navigator.vibrate)navigator.vibrate(10);}catch(_){}}
@@ -5435,7 +5438,7 @@ $('saveSlotBtn').addEventListener('click',function(){if(!state.started){toast('S
 /* ---------- saving (this device only) ---------- */
 var saveTimer=0,walkFrom=0;
 function saveNow(){
-    state.jobs=workers.map(function(w){return w.jobs.slice();});state.jobPick=workers.map(function(w){return w.pick||0;});
+    state.jobs=workers.map(function(w){return w.jobs.slice();});
     state.floorMap=state.floorMap;state.wallMap=state.wallMap;
     try{localStorage.setItem(SAVE_KEY,JSON.stringify({s:state,i:items.map(function(it){
       return it.layer==='wall'?[it.def.id,it.variant,it.stock,it.wall,it.seg,it.room]:[it.def.id,it.variant,it.stock,it.x,it.z,it.rot,it.genre,it.top];})}));}catch(_){}
@@ -5459,7 +5462,7 @@ function load(){
     if(d.s.missed&&typeof d.s.missed==='object')state.missed=d.s.missed;
     state.hired=clamp(d.s.hired|0,0,HIRE.length);if(Array.isArray(d.s.staffLooks))state.staffLooks=d.s.staffLooks.slice(0,state.hired+1);
     if(Array.isArray(d.s.duties))state.duties=d.s.duties;
-    state.jobs=Array.isArray(d.s.jobs)?d.s.jobs:null;state.jobPick=Array.isArray(d.s.jobPick)?d.s.jobPick:null;
+    state.jobs=Array.isArray(d.s.jobs)?d.s.jobs:null;
     function cl(a,n){return Array.isArray(a)?a.map(function(r){return Array.isArray(r)?r.map(function(v){return clamp(v|0,0,n-1);}):null;}):null;}
     state.floorMap=cl(d.s.floorMap,FLOORS.length);
     state.wallMap=Array.isArray(d.s.wallMap)?d.s.wallMap.map(function(r){return Array.isArray(r)?r.map(function(v){return Array.isArray(v)?v.map(function(x){return clamp(x|0,0,WALL_COLS.length-1);}):clamp(v|0,0,WALL_COLS.length-1);}):null;}):null;
@@ -5505,7 +5508,7 @@ function resetGame(){
   customers.slice().forEach(removeCustomer);
   items.slice().forEach(removeItem);
   tileRes.clear();clearWorkers();setRooms([{x:0,z:0,w:6,d:7}]);state.freeArch=0;
-  state.stock=starterStock();state.missed={};state.hired=0;state.staffLooks=[];state.duties=[];state.jobs=null;state.jobPick=null;state.floorMap=null;state.wallMap=null;state.bd=null;state.started=false;state.name='';state.staffNames=[];state.intro=0;state.outro=false;state.goal=0;state.genres=[0];state.sold={};lastReq=null;reqHold=0;Object.keys(state.stats).forEach(function(k){state.stats[k]=0;});trend.t=0;
+  state.stock=starterStock();state.missed={};state.hired=0;state.staffLooks=[];state.duties=[];state.jobs=null;state.floorMap=null;state.wallMap=null;state.bd=null;state.started=false;state.name='';state.staffNames=[];state.intro=0;state.outro=false;state.goal=0;state.genres=[0];state.sold={};lastReq=null;reqHold=0;Object.keys(state.stats).forEach(function(k){state.stats[k]=0;});trend.t=0;
   state.coins=START_COINS;state.salesXP=0;state.bestValue=0;state.sales=0;state.wallCol=0;state.floor=0;level=1;spawnTimer=2.5;lastSpawn=-99;freshIds=[];
   try{localStorage.removeItem(SAVE_KEY);}catch(_){}
   state.slotId=null;state.shopName='';state.facade=0;state.fence=0;signCache={};setOutside(false);state.day=1;state.dayT=0;state.today=null;state.rating=null;state.dayOver=false;state.cat=null;
