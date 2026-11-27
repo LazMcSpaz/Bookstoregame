@@ -514,7 +514,7 @@ var ROOM_PLAN=[{cost:300,level:3},{cost:700,level:4},{cost:1200,level:5}];
 var PATIO_PLAN=[{cost:250,level:3},{cost:450,level:5}];      // patios: open to the sky, with a low fence
 var LEVELS=[0,80,220,480,850,1400];
 var START_COINS=250;
-var GAME_VERSION='2026-11-27 c';      // shown on the title screen and in the ? sheet: change it by hand at every live push, so a phone shows which game it has
+var GAME_VERSION='2026-11-27 d';      // shown on the title screen and in the ? sheet: change it by hand at every live push, so a phone shows which game it has
 var SAVE_KEY='bookstore-cafe-proto-v2';
 // each room has four sides: 0 north, 1 east, 2 south, 3 west
 var DIRS=[[0,-1],[1,0],[0,1],[-1,0]];  // N,E,S,W as tile steps
@@ -3823,7 +3823,12 @@ function stationWork(w,k,idle){
   for(var i=0;i<list.length;i++){var st=list[i];
     if(st.def.cap&&freeFor(st,w)&&backCount(st)>0&&(st.stock<=0||(isLow(st)&&!st.queue.length)))return {type:'stock',item:st};      // top it up first
     if(st.queue.length&&!(st.def.cap&&st.stock<=0))return {type:'serve',item:st};}
-  return idle&&list.length?{type:'serve',item:list[0]}:null;
+  if(!idle)return null;
+  // just waiting: while colleagues who put this job higher are out on it (making an order, topping up a machine) and will want a station back,
+  // leave them as many stations as there are of them, so nobody walks over only to be sent off again. Someone already at a station stays.
+  var back=workers.filter(function(x){var u=x.task;return x!==w&&keener(x,w,k)&&!!u&&((u.type==='make'&&k==='food')||(u.type==='stock'&&isStation(u.item)&&jobOf(u.item)===k));}).length;
+  if(back&&back>=list.filter(function(i){return i!==cur;}).length)list=list.filter(function(i){return i===cur;});
+  return list.length?{type:'serve',item:list[0]}:null;
 }
 function stockWork(w){
   var best=null,bs=-1,food=hasJob('food');
@@ -3858,7 +3863,9 @@ function updateWorker(w,dt){
       var n=dutyTask(w);
       if(!n){if(t){setTask(w,null);t=null;}if(!w.path.length&&workTiles()[key(curTile(w))])stepAside(w);}      // nothing to do: not on a tile a station is worked from
       else if(!t||n.type!==t.type||n.item!==t.item){
-        setTask(w,n);t=w.task;
+        var was=t;setTask(w,n);t=w.task;
+        // could not get there (say, a register whose only free side is where its own line stands): stay at the station they were minding, rather than leave it empty for a colleague to walk over to
+        if(!t&&was&&was.type==='serve'&&was.item.alive&&w.jobs.indexOf(jobOf(was.item))>=0&&freeFor(was.item,w)){setTask(w,{type:'serve',item:was.item});t=w.task;}
         // could not get there: if they are walled in with no way to the door, they step out and come back in
         if(t)w.stuckT=0;
         else if((w.stuckT=(w.stuckT||0)+0.3)>=2.4){

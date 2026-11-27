@@ -17,8 +17,9 @@
 //  R5  Nobody flip-flops: a station changes hands between two staff at most 4 times in any minute.
 //  R6  A job change takes effect within 2 seconds: a task from a job just switched off is dropped.
 //  R7  One station, two people: someone who puts the job higher gets it within 8 seconds; someone who puts it no higher never takes it from a person minding it.
+//      (Someone waiting at a station of a job they put higher still is not "free" for this: with nothing to do, people wait at their first job's station.)
 //  R8  Nothing throws, and nobody (staff or customer) is stuck with somewhere to go for more than 5 seconds.
-//  R9  (added) Nobody standing still shares a tile with anyone else.
+//  R9  (added) Nobody standing still shares a tile with anyone else (for half a second or more).
 //  R10 (added) Nobody with nothing to do stands for more than 4 seconds on a tile a station is worked from.
 import { createRequire } from 'module';
 import fs from 'fs';
@@ -133,7 +134,7 @@ function harness() {
   // ---- the watcher ----
   H.start = (seed) => {
     H.v = { R1: [], R2: [], R3: [], R4: [], R5: [], R6: [], R7: [], R8: [], R9: [], R10: [] };
-    H.t = 0; H.seedNo = seed;
+    H.t = 0; H.seedNo = seed; H.clashFor = {};
     H.w = new Map(); H.st = new Map(); H.cu = new Map(); H.changes = [];
   };
   const note = (rule, text) => { const list = H.v[rule]; if (list.length < 20) list.push('t=' + H.t.toFixed(1) + ' ' + text); else list.n = (list.n || 20) + 1; };
@@ -190,7 +191,7 @@ function harness() {
       // R7 (higher rank waiting): someone free puts this job higher than the person minding it, and every station of the job is held
       const k = jobOf(it), x = it.worker;
       const allHeld = S.items.filter(i => isStation(i) && jobOf(i) === k).every(i => i.worker);
-      const keen = x && m.minding && allHeld && S.workers.find(y => y !== x && freeNow(y) && !(y.task && y.task.item !== it && isStation(y.task.item) && jobOf(y.task.item) === k) && y.jobs.indexOf(k) >= 0 && (x.jobs.indexOf(k) < 0 || y.jobs.indexOf(k) < x.jobs.indexOf(k)) && reach(y, spotsOf(it).concat([P('curTile')(x)])));
+      const keen = x && m.minding && allHeld && S.workers.find(y => y !== x && freeNow(y) && !(y.task && y.task.item !== it && isStation(y.task.item) && jobOf(y.task.item) === k) && !(y.task && isStation(y.task.item) && y.jobs.indexOf(jobOf(y.task.item)) >= 0 && y.jobs.indexOf(jobOf(y.task.item)) < y.jobs.indexOf(k)) && y.jobs.indexOf(k) >= 0 && (x.jobs.indexOf(k) < 0 || y.jobs.indexOf(k) < x.jobs.indexOf(k)) && reach(y, spotsOf(it).concat([P('curTile')(x)])));
       if (keen) { m.want += dt; if (m.want > 8 && !m.flagged.r7) { m.flagged.r7 = 1; note('R7', desc(keen) + ' puts ' + k + ' higher but ' + desc(x) + ' has kept the ' + it.def.id + ' for 8 s'); } } else { m.want = 0; m.flagged.r7 = 0; }
     });
     // R4: customers waiting while someone who could serve them is free
@@ -213,13 +214,22 @@ function harness() {
       }
     });
     // R9: two standing still on one tile
-    const seen = {};
+    // (a single sample does not count: two customers who come in from the street together reach the door tile in the same frame and stand there
+    //  for one twentieth of a second while they choose where to go, then walk off apart. Half a second together does.)
+    const seen = {}, clash = {};
     S.workers.concat(S.customers).forEach(p => {
       if (p.path.length || (p.p && p.p.g && !p.p.g.visible) || p.state === 'sit' || p.state === 'hopOn' || p.state === 'hopOff' || p.kid || p.hop) return;
       const k = Math.floor(p.x) + ',' + Math.floor(p.z);
-      if (seen[k]) { const kk = 'clash' + k; if (!H[kk] || H.t - H[kk] > 10) { H[kk] = H.t; note('R9', 'two people standing still on tile ' + k); } }
+      if (seen[k]) clash[k] = 1;
       seen[k] = 1;
     });
+    H.clashFor = H.clashFor || {};
+    for (const k in H.clashFor) if (!clash[k]) delete H.clashFor[k];
+    for (const k in clash) {
+      H.clashFor[k] = (H.clashFor[k] || 0) + dt;
+      const kk = 'clash' + k;
+      if (H.clashFor[k] >= 0.5 && (!H[kk] || H.t - H[kk] > 10)) { H[kk] = H.t; note('R9', 'two people standing still on tile ' + k + ' for half a second'); }
+    }
   };
 
   // ---- things a player does mid-day ----
