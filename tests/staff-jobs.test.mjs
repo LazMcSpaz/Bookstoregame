@@ -1,10 +1,10 @@
-// Staff jobs check. Run from the repo:  node tests/staff-jobs.test.mjs   (add --html <file> to check another copy of index.html)
+// Staff jobs check. Run from the repo:  node tests/staff-jobs.test.mjs   (add --html <file> to check another copy of index.html, --only 4b,6 for some parts)
 // Needs Playwright and Chrome. With no internet, point THREE_JS at a local copy of three.js r128 (three.min.js).
 //
 // It opens the real page in headless Chrome, builds a small shop, changes jobs by tapping the rows of the jobs screen,
 // steps the game's own clock, and records what each member of staff does. Nothing here is loaded by the game or its service worker.
 // Other settings: CHROME (path to the browser), PLAYWRIGHT_DIR (a node_modules folder that holds playwright).
-// The saves in fixtures/ were written by the game as it was at commit 4dedba2, before the jobs change.
+// The saves in fixtures/ were written by the game itself at the commit in each file's name (4dedba2: before the jobs change).
 import { createRequire } from 'module';
 import fs from 'fs';
 import path from 'path';
@@ -45,14 +45,22 @@ async function shop(opts = {}) {
     if (/three(\.min)?\.js$/.test(u.pathname)) return THREE ? route.fulfill({ status: 200, contentType: 'text/javascript', body: fs.readFileSync(THREE) }) : route.continue();
     return route.abort();      // fonts and anything else off-site: not needed
   });
-  await page.addInitScript(([key, save, seed]) => {
+  await page.addInitScript(([key, save, seed, spy]) => {
     const raf = window.requestAnimationFrame.bind(window);
     window.requestAnimationFrame = cb => cb && cb.name === 'frame' ? 0 : raf(cb);      // the game's own frame loop never starts: the test steps the game itself
-    window.AudioContext = window.webkitAudioContext = undefined;      // no sound: headless Chrome has no speaker, and the game then simply stays silent
+    if (!spy) window.AudioContext = window.webkitAudioContext = undefined;      // no sound: headless Chrome has no speaker, and the game then simply stays silent
+    else {      // the sound checks: note what the game asks of the phone's sound, without playing anything
+      const Real = window.AudioContext; window.__sound = { made: 0, clips: 0, asked: [] };
+      window.AudioContext = window.webkitAudioContext = function (...a) { window.__sound.made++; return new Real(...a); };
+      window.Audio = function () { window.__sound.clips++; return { play() { return Promise.resolve(); }, pause() {}, setAttribute() {}, loop: false, volume: 1 }; };
+      const session = { _t: 'auto', get type() { return this._t; }, set type(v) { this._t = v; window.__sound.asked.push(v); } };      // what iPhones offer as navigator.audioSession
+      Object.defineProperty(Navigator.prototype, 'audioSession', { configurable: true, get() { return session; } });
+      if (spy.switches) localStorage.setItem('bookstore-cafe-audio', JSON.stringify(spy.switches));
+    }
     let a = seed;
     Math.random = function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
     if (save != null && !sessionStorage.getItem('seeded')) { localStorage.setItem(key, save); sessionStorage.setItem('seeded', '1'); }
-  }, [SAVE_KEY, opts.save == null ? null : opts.save, opts.seed || 12345]);
+  }, [SAVE_KEY, opts.save == null ? null : opts.save, opts.seed || 12345, opts.sound || null]);
   const go = async () => {
     await page.goto('http://game.test/index.html?' + (opts.tutorial ? 'skip' : 'skip=all'));      // skip=all: straight into a full-size shop, past the first steps; skip: the first steps still to do
     await page.waitForFunction(() => window.__shop && document.getElementById('loading').hidden, null, { timeout: 60000 });
@@ -87,10 +95,11 @@ function helpers() {
   // step the game's clock and record, for each person: seconds in each activity, orders made, and seconds holding each station
   T.run = secs => {
     const dt = 0.05, n = S.workers.length, out = { secs, act: S.workers.map(() => ({})), made: new Array(n).fill(0), hold: {}, clash: 0, staffSpotIdle: new Array(n).fill(0) };
-    const last = S.workers.map(w => w.task), staffTiles = P('staffTiles');
+    const last = S.workers.map(w => w.task), staffTiles = P('staffTiles'), gave = new Set();
     for (let k = 0; k < secs / dt; k++) {
       S.simulate(dt);
       const seen = {};
+      S.customers.forEach(c => { if (c.gaveUp) gave.add(c.id); });
       S.workers.forEach((w, i) => {
         const a = T.kind(w); out.act[i][a] = (out.act[i][a] || 0) + dt;
         if (w.task !== last[i]) { if (w.task && w.task.type === 'make') out.made[i]++; last[i] = w.task; }
@@ -104,7 +113,7 @@ function helpers() {
     }
     const r = o => { const q = {}; for (const k in o) q[k] = Math.round(o[k]); return q; };
     out.act = out.act.map(r); for (const k in out.hold) out.hold[k] = out.hold[k].map(Math.round); out.staffSpotIdle = out.staffSpotIdle.map(Math.round);
-    out.sold = { books: S.state.stats.books, coffee: S.state.stats.coffee };
+    out.sold = { books: S.state.stats.books, coffee: S.state.stats.coffee }; out.gaveUp = gave.size;
     return out;
   };
   T.holder = id => { const it = T.find(id); return it && it.worker ? S.workers.indexOf(it.worker) : -1; };
@@ -137,6 +146,8 @@ async function hireTwo(g) {      // hire() is what the Hire button calls; it ope
   for (let i = 0; i < 2; i++) { await g.ev(() => window.__shop.hire()); await tap(g, '#mgmtClose'); }
 }
 
+const onlyArg = argv.indexOf('--only') >= 0 ? argv[argv.indexOf('--only') + 1].split(',') : null;      // --only 4b,6 runs just those numbered parts
+const want = id => !onlyArg || onlyArg.indexOf(id) >= 0;
 let failed = 0, passed = 0;
 function check(name, ok, detail) {
   if (ok) passed++; else failed++;
@@ -148,7 +159,7 @@ const errorsSeen = [];
 console.log('Checking ' + path.relative(process.cwd(), HTML) + '\n');
 
 /* ---------- 1. the job a player taps is the job that person does first ---------- */
-{
+if (want('1')) {
   console.log('1. Tapping a job on the jobs screen');
   const g = await shop();
   await g.ev(() => window.T.build({ shelfStock: 1 }));
@@ -183,7 +194,7 @@ console.log('Checking ' + path.relative(process.cwd(), HTML) + '\n');
 }
 
 /* ---------- 2. the order of jobs decides who gets a station, not who got there first ---------- */
-{
+if (want('2')) {
   console.log('\n2. Who gets the coffee machine and the register');
   const g = await shop();
   await g.ev(() => { window.T.build(); window.T.doors(false); });      // shelves full and no customers yet: nothing to do but wait at a station
@@ -235,7 +246,7 @@ console.log('Checking ' + path.relative(process.cwd(), HTML) + '\n');
 }
 
 /* ---------- 2b. people on the same job spread out over its stations ---------- */
-{
+if (want('2b')) {
   console.log('\n2b. Two people on one job');
   // counts the seconds each person holds each station, how often a station changes hands, and how often someone minding one is pushed off it by a colleague
   const watch = (g, ids, secs) => g.ev(([ids, secs]) => {
@@ -322,7 +333,7 @@ console.log('Checking ' + path.relative(process.cwd(), HTML) + '\n');
 }
 
 /* ---------- 3. a save made before this change still loads ---------- */
-{
+if (want('3')) {
   console.log('\n3. A save written by the old version (commit 4dedba2)');
   const raw = fs.readFileSync(path.join(here, 'fixtures', 'save-4dedba2.json'), 'utf8');
   const old = JSON.parse(raw);
@@ -339,7 +350,7 @@ console.log('Checking ' + path.relative(process.cwd(), HTML) + '\n');
 }
 
 /* ---------- 3b. an older shop where Cash register covered the order point and nobody had Food ---------- */
-{
+if (want('3b')) {
   console.log('\n3b. An old save with an order point and nobody on Food');
   const raw = fs.readFileSync(path.join(here, 'fixtures', 'save-4dedba2-orderpoint-no-food.json'), 'utf8');
   const old = JSON.parse(raw);
@@ -351,7 +362,7 @@ console.log('Checking ' + path.relative(process.cwd(), HTML) + '\n');
   // it happens once: the game writes the shop back as a new save straight away, and a new save is left alone
   await g.page.waitForTimeout(600);
   const kept = JSON.parse(await g.ev(k => localStorage.getItem(k), SAVE_KEY));
-  check('the shop is written back as a new save without waiting for the player', kept.s.jv >= 1 && J(kept.s.jobs.map(j => j.join('>'))) === J(got), 'stored jobs: ' + J(kept.s.jobs) + ' | new-save marker (jv): ' + kept.s.jv);
+  check('the shop is written back as a new save without waiting for the player', kept.s.jv >= 2 && J(kept.s.jobs.map(j => j.join('>'))) === J(got), 'stored jobs: ' + J(kept.s.jobs) + ' | new-save marker (jv): ' + kept.s.jv);
   const r = await g.ev(() => { window.__shop.setBuild(false); return window.T.run(120); });
   check('the café keeps selling in that shop', r.sold.coffee > old.s.stats.coffee && (r.hold.orderpoint || []).some(x => x > 0), 'coffee sold ' + r.sold.coffee + ' (was ' + old.s.stats.coffee + ') | seconds holding the order point: ' + J(r.hold.orderpoint));
   await g.ev(() => { window.T.setJobs([['till', 'stock'], ['stock'], ['till']]); window.__shop.peek('saveNow')(); });      // the player takes Food off everyone again
@@ -360,16 +371,16 @@ console.log('Checking ' + path.relative(process.cwd(), HTML) + '\n');
   check('a shop saved after the change is left alone, even with nobody on Food', J(again) === J(['till>stock', 'stock', 'till']), 'jobs after the player removed Food, saved and reloaded: ' + J(again));
   errorsSeen.push(...g.errors); await g.close();
 
-  // the same old save with the order point taken out: nothing to fix, so nothing changes
-  const plain = JSON.parse(raw); plain.i = plain.i.filter(a => a[0] !== 'orderpoint');
+  // the same old save with the order point and the coffee machine taken out: no caf\u00e9, nothing to fix, so nothing changes
+  const plain = JSON.parse(raw); plain.i = plain.i.filter(a => a[0] !== 'orderpoint' && a[0] !== 'espresso');
   g = await shop({ save: JSON.stringify(plain) });
   const same = await g.ev(() => window.T.jobs());
-  check('an old save with no order point keeps its jobs exactly', J(same) === J(savedJobs), 'loaded jobs: ' + J(same));
+  check('an old save with no caf\u00e9 at all keeps its jobs exactly', J(same) === J(savedJobs), 'loaded jobs: ' + J(same));
   errorsSeen.push(...g.errors); await g.close();
 }
 
 /* ---------- 4. the Café Order Point belongs to the Food job ---------- */
-{
+if (want('4')) {
   console.log('\n4. The Caf\u00e9 Order Point is part of the Food job');
   // a cash register and an order point: one person on Cash register only, one on Food only, one restocking
   let g = await shop();
@@ -401,12 +412,60 @@ console.log('Checking ' + path.relative(process.cwd(), HTML) + '\n');
   r = await g.ev(() => window.T.run(120));
   const alert = await g.ev(() => window.__shop.peek('alertText(false)'));
   check('order point only, one person on Cash register only: nobody staffs it', r.sold.coffee === soldBefore && !(r.hold.orderpoint || [0])[0], 'coffee sold before ' + soldBefore + ', after ' + r.sold.coffee + ' | activity: ' + J(r.act));
-  check('and the game says to use Food', /order point/.test(alert) && /Food/.test(alert), 'banner: ' + alert);
+  check('and the banner says the caf\u00e9 is closed and to tick Food', /closed/.test(alert) && /tick Food/.test(alert), 'banner: ' + alert);
   errorsSeen.push(...g.errors); await g.close();
 }
 
+/* ---------- 4b. only ticked jobs are done: no coffee without the Food job ---------- */
+if (want('4b')) {
+  console.log('\n4b. A register and a coffee machine, and nobody on Food');
+  let g = await shop();
+  await g.ev(() => window.T.build());
+  await hireTwo(g);
+  await g.ev(() => window.T.setJobs([['till', 'stock'], ['stock'], []]));
+  let r = await g.ev(() => window.T.run(150));
+  let banner = await g.ev(() => window.__shop.peek('alertText(false)'));
+  check('the person on Cash register does not make coffee', r.made.every(m => m === 0) && r.sold.coffee === 0, 'orders made [owner, helper 1, helper 2]: ' + J(r.made) + ' | sold ' + J(r.sold) + ' | activity: ' + J(r.act));
+  check('nobody pays for a coffee that will never be made, and nobody gives up waiting', r.sold.coffee === 0 && r.gaveUp === 0, 'coffee paid for: ' + r.sold.coffee + ' | customers who gave up: ' + r.gaveUp);
+  check('books still sell', r.sold.books > 0, 'sold ' + J(r.sold));
+  check('a banner says the café is closed and to tick Food', /closed/.test(banner) && /tick Food/.test(banner), 'banner: ' + banner);
+  const rows = await tapJob(g, 1, 'food');
+  r = await g.ev(() => window.T.run(150));
+  banner = await g.ev(() => window.__shop.peek('alertText(false)'));
+  check('tap Food for helper 1: coffee sells and the banner goes', r.sold.coffee > 0 && r.made[1] > 0 && !/Food/.test(banner), 'sold ' + J(r.sold) + ' | orders made: ' + J(r.made) + ' | banner: "' + banner + '" | rows: ' + rows);
+  errorsSeen.push(...g.errors); await g.close();
+
+  // an order already paid for, and then the only person on Food is taken off it: the person on Cash register still does not make it
+  g = await shop();
+  await g.ev(() => window.T.build());
+  await hireTwo(g);
+  await g.ev(() => window.T.setJobs([['till'], ['food'], []]));
+  const left = await g.ev(() => {
+    const S = window.__shop, T = window.T, P = S.peek;
+    for (let k = 0; k < 200 / 0.05; k++) { S.simulate(0.05); if (P('orders').some(o => !o.done && !o.w)) break; }
+    const waiting = P('orders').filter(o => !o.done && !o.w).length;
+    S.workers[1].jobs = []; P('setTask')(S.workers[1], null);
+    const r = T.run(30);
+    return { waiting, made: r.made };
+  });
+  check('an order is waiting and nobody has Food any more: the person on Cash register leaves it alone', left.waiting > 0 && left.made[0] === 0, 'orders waiting when Food was taken away: ' + left.waiting + ' | orders made in the next 30 seconds [owner, helper 1, helper 2]: ' + J(left.made));
+  errorsSeen.push(...g.errors); await g.close();
+
+  // shops saved by older versions, where the person on Cash register made the coffee: they keep selling coffee
+  for (const [file, was] of [['save-4dedba2-register-coffee-no-food.json', 'the version before the jobs change'], ['save-56a048f-register-coffee-no-food.json', 'the version live before this one']]) {
+    const raw = fs.readFileSync(path.join(here, 'fixtures', file), 'utf8'), old = JSON.parse(raw);
+    g = await shop({ save: raw });
+    const got = await g.ev(() => window.T.jobs());
+    r = await g.ev(() => { window.__shop.setBuild(false); return window.T.run(150); });
+    check('a save from ' + was + ' (register, coffee machine, nobody on Food): Cash register people get Food after it, and coffee keeps selling',
+      J(old.s.jobs.map(j => j.join('>'))) === J(['till>stock', 'stock']) && !old.i.some(a => a[0] === 'orderpoint') && J(got) === J(['till>food>stock', 'stock']) && r.sold.coffee > old.s.stats.coffee,
+      'saved jobs ' + J(old.s.jobs) + ' (marker jv: ' + old.s.jv + ') | loaded ' + J(got) + ' | coffee sold ' + r.sold.coffee + ' (was ' + old.s.stats.coffee + ')');
+    errorsSeen.push(...g.errors); await g.close();
+  }
+}
+
 /* ---------- 5. the jobs lesson in the first steps ---------- */
-{
+if (want('5')) {
   console.log('\n5. The jobs lesson in the first steps');
   // follow the pointer the way a new player does; with swap, tap the two jobs the other way round
   const lesson = async swap => {
