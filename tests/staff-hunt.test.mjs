@@ -255,9 +255,11 @@ function harness() {
 }
 
 // ---------------- driving it ----------------
-const STATIONS_NAMED = {      // the two shops that still stalled 4 to 6 s after the Part A fix (explorer seeds 107 and 140), run as seeds 1001 and 1002
+const STATIONS_NAMED = {      // fixed shops, run after the random ones: 1001 and 1002 still stalled 4 to 6 s after the Part A fix (explorer seeds 107 and 140); 1003 is the owner's layout
   1001: { stations: [['espresso', 3, 2, 1], ['orderpoint', 3, 3, 2], ['register', 4, 3, 1], ['pickup', 3, 4, 0]], jobs: [['food', 'till', 'stock'], ['food', 'till'], ['food']] },
   1002: { stations: [['espresso', 1, 3, 0], ['register', 2, 3, 3], ['orderpoint', 2, 4, 2], ['pickup', 1, 6, 2]], jobs: [['till', 'stock'], ['food', 'till'], ['stock', 'till', 'food']] },
+  // the owner's own stall: a coffee machine on a counter of its own, open on both sides, two people on Food, plus a register and an order point
+  1003: { stations: [['espresso', 4, 4, 0], ['register', 1, 5, 0], ['orderpoint', 6, 5, 0]], jobs: [['till', 'stock'], ['food', 'till'], ['food', 'stock']] },
 };
 async function openPage(seed, saved) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
@@ -339,7 +341,7 @@ async function huntOne(seed) {
 const RULES = ['R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7', 'R8', 'R9', 'R10'];
 const seeds = [];
 for (let s = FROM; s < FROM + COUNT; s++) seeds.push(s);
-if (!ONE && !arg('--from')) seeds.push(1001, 1002);
+if (!ONE && !arg('--from')) seeds.push(1001, 1002, 1003);
 console.log('Hunting in ' + path.relative(process.cwd(), HTML) + ': ' + seeds.length + ' shops, ' + MINUTES + ' simulated minutes each\n');
 const tally = Object.fromEntries(RULES.map(r => [r, 0])), hits = Object.fromEntries(RULES.map(r => [r, []]));
 let minutes = 0;
