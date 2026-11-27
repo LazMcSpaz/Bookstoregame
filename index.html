@@ -5430,8 +5430,8 @@ var resetArmed=false;
 document.addEventListener('click',function(e){var b=e.target.closest&&e.target.closest('button,.card,.tab,.set,.jrow');if(b)sfx('pop');},true);
 function renderSound(){if(typeof AU==='undefined'||!AU)return;$('musicBtn').textContent='Music: '+(AU.on.music?'On':'Off');$('sfxBtn').textContent='Sounds: '+(AU.on.sfx?'On':'Off');$('musicBtn').classList.toggle('go',AU.on.music);$('sfxBtn').classList.toggle('go',AU.on.sfx);
   var st=!AU.ctx?'Sound starts after your first tap.':AU.ctx.state==='running'?'Sound is playing. If you hear nothing, check the volume and the silent switch.':'Sound is waiting ('+AU.ctx.state+'). Tap anywhere to start it.';$('soundState').textContent=st;}
-$('musicBtn').addEventListener('click',function(){audioUnlock();setMusic(!AU.on.music);renderSound();});
-$('sfxBtn').addEventListener('click',function(){audioUnlock();setSfx(!AU.on.sfx);renderSound();if(AU.on.sfx)setTimeout(function(){sfx('goal');},120);});
+$('musicBtn').addEventListener('click',function(){setMusic(!AU.on.music);audioUnlock();renderSound();});
+$('sfxBtn').addEventListener('click',function(){setSfx(!AU.on.sfx);audioUnlock();renderSound();if(AU.on.sfx)setTimeout(function(){sfx('goal');},120);});
 renderSound();
 $('menuBtn').addEventListener('click',function(){$('menu').classList.add('on');$('shopNameIn').value=state.shopName||'';renderSound();resetArmed=false;$('resetBtn').textContent='New game';slotArmed=null;renderSlots();});
 $('closeMenu').addEventListener('click',function(){$('menu').classList.remove('on');});
@@ -5659,26 +5659,34 @@ function audioStart(){
   if(AU.ctx.state==='suspended')AU.ctx.resume();
   setMusic(AU.on.music,true);
   AU.timer=setInterval(musicTick,60);
-  document.addEventListener('visibilitychange',function(){if(!AU.ctx)return;if(document.hidden){AU.ctx.suspend();if(AU.tag)AU.tag.pause();}else{AU.ctx.resume();if(AU.tag){var pr=AU.tag.play();if(pr&&pr.catch)pr.catch(function(){});}}});
+  document.addEventListener('visibilitychange',function(){if(!AU.ctx)return;if(document.hidden)AU.ctx.suspend();else if(soundWanted())AU.ctx.resume();});
 }
-// iPhones only let sound start from a finished tap (finger lifted), and web sound obeys the silent switch unless the page
-// asks to be treated as media. So: try on every kind of tap, play a moment of silence to wake the speaker, and ask for media playback.
-var SILENT_WAV='data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=';
+// The game's sound is background sound. It must never stop music or a video that is already playing on the phone, so:
+//  - it asks the phone to mix it with other sound ("ambient"), where the browser lets a page ask (iPhone and iPad);
+//  - it never plays a media clip of its own (a looping silent clip used to make the phone treat the game as a media player, which is what cut other sound off);
+//  - with Music and Sounds both switched off it does not touch the phone's sound at all.
+// The price: like most games, it is silent while an iPhone's ring/silent switch is set to silent.
+// iPhones only let sound start from a finished tap (finger lifted), so this runs on every kind of tap.
+function soundWanted(){return AU.on.music||AU.on.sfx;}
+function audioMix(){try{if(navigator.audioSession&&navigator.audioSession.type!=='ambient')navigator.audioSession.type='ambient';}catch(e){}}
+audioMix();
 function audioUnlock(){
-  try{if(navigator.audioSession&&navigator.audioSession.type!=='playback')navigator.audioSession.type='playback';}catch(e){}
+  if(!soundWanted())return;
+  audioMix();
   audioStart();var ctx=AU.ctx;if(!ctx)return;
   if(ctx.state!=='running'){try{ctx.resume();}catch(e){}}
   if(!AU.woke){try{var b=ctx.createBuffer(1,1,22050),s=ctx.createBufferSource();s.buffer=b;s.connect(ctx.destination);s.start(0);AU.woke=true;}catch(e){}}
-  if(!AU.tag){try{var a=new Audio(SILENT_WAV);a.loop=true;a.setAttribute('playsinline','');a.volume=0.01;var pr=a.play();if(pr&&pr.catch)pr.catch(function(){AU.tag=null;});AU.tag=a;}catch(e){}}
   if(typeof renderSound==='function')setTimeout(renderSound,300);
 }
+function audioRest(){if(AU.ctx&&!soundWanted()){try{AU.ctx.suspend();}catch(e){}}}      // both switched off: let go of the phone's sound
 ['pointerdown','pointerup','touchend','click','keydown'].forEach(function(ev){window.addEventListener(ev,audioUnlock,true);});
 function setMusic(on,quiet){
   AU.on.music=!!on;if(!quiet)audioSavePrefs();if(!AU.ctx)return;
   var g=AU.bus.music.gain,t=AU.ctx.currentTime;g.cancelScheduledValues(t);g.setValueAtTime(g.value,t);g.linearRampToValueAtTime(on?0.5:0,t+(on?4:0.6));
   if(on&&AU.nextBar<t+0.1){AU.nextBar=t+0.3;AU.bar=0;AU.sec=0;}
+  if(!soundWanted())setTimeout(audioRest,800);      // after the fade
 }
-function setSfx(on){AU.on.sfx=!!on;audioSavePrefs();}
+function setSfx(on){AU.on.sfx=!!on;audioSavePrefs();audioRest();}
 
 /* --- instruments. Each plays one note: (ctx, out, time, midi, length in seconds, loudness) --- */
 function env(ctx,t,a,peak,dec,end){var g=ctx.createGain();g.gain.setValueAtTime(0.0001,t);g.gain.linearRampToValueAtTime(peak,t+a);g.gain.setTargetAtTime(0.0001,t+a,dec);g.gain.setTargetAtTime(0.00001,end,0.08);return g;}
