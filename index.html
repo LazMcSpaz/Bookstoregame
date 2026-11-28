@@ -514,7 +514,7 @@ var ROOM_PLAN=[{cost:300,level:3},{cost:700,level:4},{cost:1200,level:5}];
 var PATIO_PLAN=[{cost:250,level:3},{cost:450,level:5}];      // patios: open to the sky, with a low fence
 var LEVELS=[0,80,220,480,850,1400];
 var START_COINS=250;
-var GAME_VERSION='2026-11-27 e';      // shown on the title screen and in the ? sheet: change it by hand at every live push, so a phone shows which game it has
+var GAME_VERSION='2026-11-27 f';      // shown on the title screen and in the ? sheet: change it by hand at every live push, so a phone shows which game it has
 var SAVE_KEY='bookstore-cafe-proto-v2';
 // each room has four sides: 0 north, 1 east, 2 south, 3 west
 var DIRS=[[0,-1],[1,0],[0,1],[-1,0]];  // N,E,S,W as tile steps
@@ -3787,6 +3787,7 @@ var JOBS=[{k:'till',name:'Cash register',sub:'Takes payment at the cash register
 function jobOf(it){return it.def.role==='snack'||(it.def.role==='counter'&&it.def.cafeOnly)?'food':it.def.role==='counter'?'till':null;}      // the Café Order Point is part of the Food job
 function hasJob(k){return workers.some(function(w){return w.jobs.indexOf(k)>=0;});}
 function freeFor(it,w){return !(it.worker&&it.worker!==w)&&!(it.stocker&&it.stocker!==w)&&!blocked(it);}
+function servable(it,w){return !(it.worker&&it.worker!==w)&&!blocked(it);}      // someone fetching a box for a pastry case does not stop a colleague serving its line meanwhile
 function keener(w,x,k){      // does w put job k ahead of where x puts it?
   var a=w.jobs.indexOf(k),b=x.jobs.indexOf(k);
   return a>=0&&(b<0||a<b);
@@ -3817,12 +3818,15 @@ function stepAside(w){      // clear of every station's staff spot and every lin
   return workerGo(w,[open]);
 }
 function stationWork(w,k,idle){
-  var cur=w.task&&w.task.item,all=items.filter(function(i){return isStation(i)&&jobOf(i)===k;}),list=all.filter(function(i){return freeFor(i,w);});      // a station nobody else is at: people on one job spread out
+  var cur=w.task&&w.task.item,all=items.filter(function(i){return isStation(i)&&jobOf(i)===k;}),list=all.filter(function(i){return freeFor(i,w)||(i.queue.length&&servable(i,w));});      // a station nobody else is at: people on one job spread out (and a case someone is fetching a box for, if it has a line)
   if(!list.length)list=all.filter(function(i){return canTake(i,w,k);});      // every one is taken: have the station of someone this job matters less to
   list.sort(function(a,b){return (b===cur)-(a===cur)||b.queue.length-a.queue.length||(b.def.role==='counter')-(a.def.role==='counter');});      // with nothing to choose between them, wait where customers come to pay
   for(var i=0;i<list.length;i++){var st=list[i];
     if(st.def.cap&&freeFor(st,w)&&backCount(st)>0&&(st.stock<=0||(isLow(st)&&!st.queue.length)))return {type:'stock',item:st};      // top it up first
     if(st.queue.length&&!(st.def.cap&&st.stock<=0))return {type:'serve',item:st};}
+  // a colleague is serving a line at a case that is running low: fetch more for it now, so it does not run out with people still waiting
+  var low=all.filter(function(i){return i.def.cap&&i.worker&&i.worker!==w&&i.queue.length&&freeFor(i,i.worker)&&backCount(i)>0&&isLow(i);})[0];
+  if(low)return {type:'stock',item:low};
   if(!idle)return null;
   // just waiting: while colleagues who put this job higher are out on it (making an order, topping up a machine) and will want a station back,
   // leave them as many stations as there are of them, so nobody walks over only to be sent off again. Someone already at a station stays.
@@ -3859,6 +3863,9 @@ function updateWorker(w,dt){
   w.think-=dt;
   if(w.think<=0){
     w.think=0.3;
+    // on the way to the back room for a box, a line has formed at that case while it still has some to sell, and nobody else is free to serve it: serve them first, then go
+    if(t&&t.type==='stock'&&t.phase==='fetch'&&isStation(t.item)&&t.item.queue.length&&t.item.stock>0&&servable(t.item,w)&&w.jobs.indexOf(jobOf(t.item))>=0
+      &&!workers.some(function(x){return x!==w&&x.jobs.indexOf(jobOf(t.item))>=0&&spare(x)&&canStand(x,t.item);})){setTask(w,null);t=null;}
     if(!(t&&(t.type==='stock'||t.type==='make'||w.state==='order'))){      // never drop a shelf run or a sale half-way
       var n=dutyTask(w);
       if(!n){if(t){setTask(w,null);t=null;}if(!w.path.length&&workTiles()[key(curTile(w))])stepAside(w);}      // nothing to do: not on a tile a station is worked from

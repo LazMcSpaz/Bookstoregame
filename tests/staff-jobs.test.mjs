@@ -651,6 +651,70 @@ if (want('8')) {
   errorsSeen.push(...g.errors); await g.close();
 }
 
+/* ---------- 9. a pastry case being restocked: its line is still served ---------- */
+if (want('9')) {
+  console.log('\n9. Restocking a pastry case with people in line');
+  // No register, so people line up at the croissant case itself (counter at 4,4: staff stand behind it, the line forms in front).
+  // `who`: the jobs of each person. `stock`: pastries in the case to start. `arrive`: 'trip' = three people join the line just after someone sets off
+  // for a box, 'steady' = one every 1.6 s from the start. They are put down beside the case, so the timing does not hang on the walk in from the street.
+  const pastry = (g, o) => g.ev(o => {
+    const S = window.__shop, T = window.T, P = S.peek;
+    T.build({ register: false, espresso: false });
+    T.put('counter', 4, 4); T.put('croissants', 4, 4, 0, o.stock);
+    S.state.stock.pastry = 60; T.doors(false);
+    for (let i = 1; i < o.who.length; i++) S.hire();
+    T.setJobs(o.who);
+    const cs = T.find('croissants'), dt = 0.05;
+    const join = () => { const c = P('spawnCustomer')(); c.x = 4.5; c.z = 7.5; c.path = []; c.state = ''; c.after = null; c.p.g.position.set(c.x, 0, c.z); c.plan = ['snack']; P('orderAt')(c, cs); };
+    const r = { soldDuringRun: 0, frontWaitWithStock: 0, sold: 0, stockerNotServer: 0, ranOutWithLine: 0, turnedBack: false, refills: 0, clash: 0, log: [] };
+    let t = 0, sent = 0, start = null, prevSold = S.state.stats.pastry || 0, prevStock = cs.stock, lastStocker = null;
+    for (let k = 0; k < o.secs / dt; k++) {
+      if (o.arrive === 'steady') { if (sent < 12 && t >= sent * 1.6) { join(); sent++; } }
+      else if (start == null) { if (cs.stocker) start = t; }
+      else if (sent < 3 && t >= start + 0.5 + sent * 0.6) { join(); sent++; }
+      const runner = cs.stocker, phase = runner && runner.task && runner.task.phase;
+      S.simulate(dt); t += dt;
+      const sold = S.state.stats.pastry || 0;
+      if (sold > prevSold && cs.stocker && cs.stocker === runner) r.soldDuringRun += sold - prevSold;      // sold while someone is out fetching a box for this case
+      if (runner && phase === 'fetch' && !cs.stocker && sold === prevSold) r.turnedBack = true;      // dropped the trip to the back room before getting there
+      if (cs.stock > prevStock) r.refills++;
+      if (cs.stock === 0 && prevStock > 0 && cs.queue.length) r.ranOutWithLine++;
+      if (cs.stocker && cs.worker && cs.stocker !== cs.worker && cs.queue.length) r.stockerNotServer += dt;
+      const front = P('atFront')(cs), serving = S.workers.some(w => w.task && w.task.type === 'serve' && w.task.item === cs && w.state === 'order');
+      if (front && !serving && cs.stock > 0) r.frontWaitWithStock += dt;      // someone at the front of the line, pastries in the case, nobody serving
+      const seen = {};
+      S.workers.concat(S.customers).forEach(p => { if (p.path.length || (p.p && p.p.g && !p.p.g.visible) || p.state === 'sit') return; const key = Math.floor(p.x) + ',' + Math.floor(p.z); if (seen[key]) r.clash++; seen[key] = 1; });
+      if (cs.stocker !== lastStocker) { r.log.push(t.toFixed(1) + ' stocker ' + (cs.stocker ? S.workers.indexOf(cs.stocker) : '-') + ' stock ' + cs.stock + ' line ' + cs.queue.length); lastStocker = cs.stocker; }
+      prevSold = sold; prevStock = cs.stock;
+    }
+    r.sold = (S.state.stats.pastry || 0); r.frontWaitWithStock = +r.frontWaitWithStock.toFixed(1); r.stockerNotServer = +r.stockerNotServer.toFixed(1); r.stockEnd = cs.stock;
+    return r;
+  }, o);
+
+  // two on Food: one sets off to fetch pastries (the case is low, nobody in line), then three people line up. The other serves them meanwhile.
+  let g = await shop();
+  let r = await pastry(g, { who: [['food'], ['food'], ['stock']], stock: 2, arrive: 'trip', secs: 30 });
+  check('two on Food, one fetching pastries for the case: the other serves its line meanwhile', r.soldDuringRun >= 1 && r.frontWaitWithStock <= 3,
+    'sold while the box was being fetched: ' + r.soldDuringRun + ' | seconds someone stood at the front with pastries in the case and nobody serving: ' + r.frontWaitWithStock + ' | ' + r.log.join(', '));
+  check('and the case still gets topped up, and everyone is served', r.refills >= 1 && r.sold >= 3 && r.clash === 0, 'top-ups: ' + r.refills + ' | sold: ' + r.sold + ' | clashes: ' + r.clash);
+  errorsSeen.push(...g.errors); await g.close();
+
+  // alone on Food: on the way to the back room, people line up while the case still has pastries. Serve them first, then go.
+  g = await shop();
+  r = await pastry(g, { who: [['food']], stock: 2, arrive: 'trip', secs: 40 });
+  check('alone on Food: on the way to fetch pastries, a line forms while the case still has some: turns back and serves first', r.turnedBack && r.frontWaitWithStock <= 4,
+    'turned back: ' + r.turnedBack + ' | seconds someone stood at the front with pastries in the case and nobody serving: ' + r.frontWaitWithStock + ' | ' + r.log.join(', '));
+  check('and then goes for the box, and everyone is served', r.refills >= 1 && r.sold >= 3 && r.stockEnd > 2 && r.clash === 0, 'top-ups: ' + r.refills + ' | sold: ' + r.sold + ' | in the case at the end: ' + r.stockEnd + ' | clashes: ' + r.clash);
+  errorsSeen.push(...g.errors); await g.close();
+
+  // two on Food and a steady line: the case runs low while one serves. The other fetches more, so the one serving never has to leave the line.
+  g = await shop();
+  r = await pastry(g, { who: [['food'], ['food'], ['stock']], stock: 6, arrive: 'steady', secs: 45 });
+  check('two on Food, a steady line runs the case low: the other fetches more while the line is served', r.stockerNotServer >= 3 && r.frontWaitWithStock <= 3 && r.sold >= 13,
+    'seconds one fetched while the other served: ' + r.stockerNotServer + ' | seconds at the front with pastries and nobody serving: ' + r.frontWaitWithStock + ' | sold: ' + r.sold + ' | ' + r.log.join(', '));
+  errorsSeen.push(...g.errors); await g.close();
+}
+
 /* ---------- 6. the game's sound leaves other sound on the phone alone ---------- */
 if (want('6')) {
   console.log('\n6. Sound');
